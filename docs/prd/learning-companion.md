@@ -16,7 +16,7 @@ Engineers and lifelong learners face two friction points in daily professional a
 
 Directly inserting grammar lessons into primary coding agent sessions inflates context windows, increases latency, and prompts developers to passively copy-paste without retention.
 
-**Learning Companion** is a unified, local-first personal learning engine inspired by `ai-memory` and OMP's `teach` skill ecosystem:
+**Learning Companion** is a unified, local-first personal learning engine for high-retention knowledge and language acquisition:
 - **Module 1 (English Pre-Flight & Daily Communication)**:
   - Takes raw conversational thoughts in Portuguese or informal English.
   - Generates idiomatic, natural English using an efficient LLM (configured via `.env`).
@@ -37,7 +37,7 @@ Directly inserting grammar lessons into primary coding agent sessions inflates c
 - **Runtime Environment**: Node.js 20+ runtime on Linux (Fedora bootc / x86_64).
 - **Core Technology Stack**:
   - **Framework**: Next.js 16+ (App Router) with React 19 and TypeScript.
-  - **Styling**: Tailwind CSS v4, Lucide React (icons), Slate dark-theme aesthetic (inspired by `ai-memory`).
+  - **Styling**: Tailwind CSS v4, Lucide React (icons), Slate dark-theme aesthetic.
   - **Data Storage**: Plain Markdown wiki files (`data/wiki/**/*.md`) as the primary source of truth, backed by a local SQLite cache (`data/cache.db`) using `better-sqlite3` and Drizzle ORM for fast queries.
   - **Embeddings**: In-process sentence embeddings via `@xenova/transformers` running `all-MiniLM-L6-v2` (384 dimensions) on CPU with zero data egress and zero external daemons.
   - **LLM Connectivity**: Configured strictly via `.env` (`LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`), supporting Groq (`llama-3.1-8b-instant`), local Ollama (`qwen2.5:7b` / `llama3.2`), or OpenAI.

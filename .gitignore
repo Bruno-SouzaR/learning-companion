@@ -13,6 +13,8 @@
 # production
 /build
 
+*.tsbuildinfo
+
 # misc
 .DS_Store
 *.pem

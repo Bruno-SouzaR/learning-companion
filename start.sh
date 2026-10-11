@@ -2,7 +2,9 @@
 set -e
 
 # Ensure local LLM server on Intel Arc 140V (Vulkan iGPU) is active
-systemctl --user start learning-llm.service
+if ! curl -s http://127.0.0.1:8080/health > /dev/null 2>&1; then
+  systemctl --user start learning-llm.service || true
+fi
 
 echo "=========================================================="
 echo "🧠 Local LLM: Qwen 3.5 2B Q8 on Intel Arc 140V (Vulkan iGPU)"

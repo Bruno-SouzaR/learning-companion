@@ -34,14 +34,15 @@ export function ActiveRecall({
   const [isCopied, setIsCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [isDiffVisible, setIsDiffVisible] = useState(false);
 
-  // Compute word-by-word diff
+  // Compute word-by-word diff only when explicit verification is triggered
   const diffParts = useMemo(() => {
-    if (!typedInput.trim()) return [];
+    if (!isDiffVisible || !typedInput.trim()) return [];
     return diffWordsWithSpace(result.target_english, typedInput.trim(), {
       ignoreCase: true,
     });
-  }, [result.target_english, typedInput]);
+  }, [result.target_english, typedInput, isDiffVisible]);
 
   // Check if user's attempt matches target (ignoring trailing whitespace and case)
   const isExactMatch = useMemo(() => {
@@ -50,6 +51,31 @@ export function ActiveRecall({
     return cleanTarget.length > 0 && cleanTarget === cleanTyped;
   }, [result.target_english, typedInput]);
 
+  function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setTypedInput(e.target.value);
+    // Instantly hide the diff when user types again, forcing active recall from memory
+    if (isDiffVisible) {
+      setIsDiffVisible(false);
+    }
+  }
+
+  function handleCheckAttempt() {
+    if (!typedInput.trim()) return;
+    setIsDiffVisible(true);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!typedInput.trim()) return;
+
+      if (!isDiffVisible) {
+        setIsDiffVisible(true);
+      } else if (isExactMatch) {
+        handleCopyAndSave();
+      }
+    }
+  }
   async function handleCopyAndSave() {
     try {
       await navigator.clipboard.writeText(result.target_english);
@@ -197,9 +223,13 @@ export function ActiveRecall({
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             Recuperação Ativa (Digite de memória em inglês)
           </label>
-          {isExactMatch && (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800">
+          {isDiffVisible && isExactMatch ? (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-800">
               <Check className="w-3.5 h-3.5" /> 100% de Acerto!
+            </span>
+          ) : (
+            <span className="text-xs text-slate-400 font-mono hidden sm:inline">
+              Pressione <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">Enter</kbd> para verificar
             </span>
           )}
         </div>
@@ -208,17 +238,24 @@ export function ActiveRecall({
           id="active-recall-input"
           rows={3}
           value={typedInput}
-          onChange={(e) => setTypedInput(e.target.value)}
-          placeholder="Tente formular a frase em inglês de memória aqui..."
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          placeholder="Tente formular a frase em inglês de memória aqui e pressione Enter para verificar..."
           className="w-full bg-slate-950/80 border border-slate-800 rounded-lg p-3.5 text-slate-100 placeholder-slate-500 text-base focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all resize-y"
         />
 
-        {/* Word-level diff display */}
-        {typedInput.trim().length > 0 && (
-          <div className="mt-4 p-4 rounded-lg bg-slate-950/80 border border-slate-800">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">
-              Comparativo Palavra a Palavra (Diff)
-            </span>
+        {/* Word-level diff display — shown ONLY after user checks their attempt */}
+        {isDiffVisible && typedInput.trim().length > 0 && (
+          <div className="mt-4 p-4 rounded-lg bg-slate-950/80 border border-slate-800 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Comparativo Palavra a Palavra (Diff)
+              </span>
+              <span className="text-xs text-slate-400 italic">
+                Ao voltar a digitar acima, o comparativo será ocultado para você treinar a retenção.
+              </span>
+            </div>
+
             <div className="text-base leading-relaxed font-mono flex flex-wrap gap-1 items-center">
               {diffParts.map((part, index) => {
                 if (part.added) {
@@ -237,7 +274,7 @@ export function ActiveRecall({
                     <span
                       key={index}
                       className="px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/80 underline decoration-amber-400 text-sm font-semibold"
-                      title="Palavra que faltou"
+                      title="Palavra que faltou da frase ideal"
                     >
                       {part.value}
                     </span>
@@ -266,29 +303,50 @@ export function ActiveRecall({
             <span>Treinar Outra Frase</span>
           </button>
 
-          <button
-            onClick={handleCopyAndSave}
-            disabled={isSaving}
-            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white shadow-lg transition-all cursor-pointer ${
-              isExactMatch
-                ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
-                : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/20'
-            }`}
-          >
-            {isCopied ? (
-              <>
-                <Check className="w-4 h-4" />
-                <span>Copiado para Clipboard!</span>
-              </>
+          <div className="flex items-center gap-2.5">
+            {!isDiffVisible ? (
+              <button
+                onClick={handleCheckAttempt}
+                disabled={!typedInput.trim()}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+              >
+                <span>Verificar Tentativa</span>
+                <kbd className="text-[10px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-400 border border-slate-700">Enter</kbd>
+              </button>
             ) : (
-              <>
-                <Copy className="w-4 h-4" />
-                <span>
-                  {isSaved ? 'Copiar Novamente' : 'Copiar e Salvar no Wiki'}
-                </span>
-              </>
+              <button
+                onClick={() => setIsDiffVisible(false)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 transition-colors cursor-pointer"
+              >
+                <EyeOff className="w-3.5 h-3.5" />
+                <span>Ocultar Comparativo</span>
+              </button>
             )}
-          </button>
+
+            <button
+              onClick={handleCopyAndSave}
+              disabled={isSaving}
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white shadow-lg transition-all cursor-pointer ${
+                isDiffVisible && isExactMatch
+                  ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                  : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/20'
+              }`}
+            >
+              {isCopied ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Copiado para Clipboard!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" />
+                  <span>
+                    {isSaved ? 'Copiar Novamente' : 'Copiar e Salvar no Wiki'}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Sparkles, BookOpen, GraduationCap, GitBranch } from 'lucide-react';
+import { Sparkles, BookOpen, GraduationCap } from 'lucide-react';
 import { EnglishPreFlight } from '@/components/english-preflight';
 import { ActiveRecall } from '@/components/active-recall';
 import { StudyRecords } from '@/components/study-records';
@@ -108,8 +108,8 @@ export default function Home() {
       <footer className="border-t border-slate-900 py-4 text-center text-xs text-slate-400">
         <div className="max-w-4xl mx-auto px-4 flex items-center justify-between">
           <span>Learning Companion &bull; Local-first</span>
-          <span className="flex items-center gap-1 text-slate-400">
-            <GitBranch className="w-3.5 h-3.5" /> Inspiração: ai-memory &amp; teach skill
+          <span className="text-slate-500">
+            Active Recall &bull; Markdown Wiki &bull; Local Embeddings
           </span>
         </div>
       </footer>
