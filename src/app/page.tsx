@@ -91,17 +91,21 @@ export default function Home() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-6 md:py-8">
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-6 md:py-8 flex flex-col">
         {activeTab === 'english' ? (
-          <div className="space-y-6">
+          <div className={`w-full space-y-6 ${!refinedResult ? 'my-auto py-6 sm:py-10' : ''}`}>
             {!refinedResult ? (
-              <div className="space-y-4">
-                <div className="mb-2">
-                  <h2 className="text-xl font-bold text-slate-100">
+              <div className="space-y-6 max-w-3xl mx-auto">
+                <div className="text-center space-y-2.5">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 shadow-sm">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    <span>English Pre-Flight &bull; Pedagogia Local</span>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight">
                     Aprimore sua Comunicação em Inglês
                   </h2>
-                  <p className="text-sm text-slate-400 mt-1">
-                    Escreva pensamentos, pedidos ou mensagens diárias. A IA gera a versão idiomática, aponta os erros e desafia sua retenção ativa antes de copiar.
+                  <p className="text-sm text-slate-400 max-w-xl mx-auto leading-relaxed">
+                    Escreva pensamentos, pedidos ou mensagens diárias. A IA local gera a versão idiomática, aponta os erros e desafia sua retenção ativa antes de copiar.
                   </p>
                 </div>
 
