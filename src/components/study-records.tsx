@@ -76,9 +76,6 @@ export function StudyRecords() {
               <BookOpen className="w-4 h-4 text-indigo-400" />
               Base de Conhecimento &amp; Histórico (.md)
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Busca semântica via vetor local <code className="text-indigo-400">all-MiniLM-L6-v2</code> em processo
-            </p>
           </div>
 
           {/* Module Filter Pills */}

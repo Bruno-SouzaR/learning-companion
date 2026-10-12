@@ -156,12 +156,9 @@ export default function Home() {
       </main>
 
       {/* Subtle Footer */}
-      <footer className="border-t border-slate-900 py-4 text-center text-xs text-slate-400">
+      <footer className="border-t border-slate-900 py-4 text-xs text-slate-500">
         <div className="max-w-4xl mx-auto px-4 flex items-center justify-between">
-          <span>Learning Companion &bull; Local-first</span>
-          <span className="text-slate-500">
-            Active Recall &bull; Markdown Wiki &bull; Local Embeddings
-          </span>
+          <span>Learning Companion</span>
         </div>
       </footer>
     </div>
