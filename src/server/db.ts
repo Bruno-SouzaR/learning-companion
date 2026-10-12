@@ -1,25 +1,32 @@
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
-
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_PATH = path.join(DATA_DIR, 'cache.db');
+import { getDataDir } from './paths';
 
 let dbInstance: DatabaseSync | null = null;
+let dbPathCache: string | null = null;
+
+export function getDbPath(): string {
+  if (dbPathCache) return dbPathCache;
+  dbPathCache = path.join(getDataDir(), 'cache.db');
+  return dbPathCache;
+}
 
 export function getDb(): DatabaseSync {
   if (dbInstance) return dbInstance;
 
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  const dataDir = getDataDir();
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
   }
 
-  dbInstance = new DatabaseSync(DB_PATH);
+  dbInstance = new DatabaseSync(getDbPath());
 
   // Initialize schema
   dbInstance.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA busy_timeout = 5000;
+    PRAGMA foreign_keys = ON;
 
     CREATE TABLE IF NOT EXISTS entries (
       id TEXT PRIMARY KEY,
@@ -92,6 +99,7 @@ export function getDb(): DatabaseSync {
       total_sections INTEGER NOT NULL DEFAULT 0,
       completed_sections TEXT NOT NULL DEFAULT '[]',
       file_path TEXT,
+      entry_id TEXT,
       error_message TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -129,5 +137,22 @@ export function getDb(): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_quiz_questions_quiz ON quiz_questions(quiz_id);
   `);
 
+  migrateIngestJobColumns(dbInstance);
+
   return dbInstance;
+}
+
+/**
+ * Idempotent migration: adds columns introduced after the table was created
+ * (existing local SQLite databases). Safe to run on every boot.
+ */
+function migrateIngestJobColumns(db: DatabaseSync): void {
+  const columns = db.prepare('PRAGMA table_info(ingest_jobs)').all() as Array<{ name: string }>;
+  const hasEntryId = columns.some((c) => c.name === 'entry_id');
+
+  if (!hasEntryId) {
+    db.exec(`
+      ALTER TABLE ingest_jobs ADD COLUMN entry_id TEXT;
+    `);
+  }
 }

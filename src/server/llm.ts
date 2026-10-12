@@ -7,8 +7,8 @@ export const refineResultSchema = z.object({
   mistakes_summary: z.array(z.string()).describe('2-3 concise bullet points in Portuguese explaining grammar, prepositions, or vocabulary mistakes'),
   key_vocabulary: z.array(
     z.object({
-      term: z.string(),
-      definition: z.string(),
+      term: z.string().describe('Phrasal verb, collocation, or key word'),
+      definition: z.string().describe('Portuguese definition and meaning'),
     })
   ).describe('Key vocabulary terms and their Portuguese definitions'),
   tags: z.array(z.string()).describe('Topic and error category tags'),
@@ -25,8 +25,8 @@ You MUST respond with a valid JSON object strictly matching this schema:
   "title": "Short descriptive title in Portuguese",
   "target_english": "Natural, idiomatic English sentence(s)",
   "mistakes_summary": [
-    "Ponto 1 em português explicando erro ou melhoria",
-    "Ponto 2 em português"
+    "Punto 1 em português explicando erro ou melhora",
+    "Punto 2 em português"
   ],
   "key_vocabulary": [
     {"term": "phrasal verb or key word", "definition": "significado em português"}
@@ -39,16 +39,20 @@ Guidelines:
 - In mistakes_summary, be direct, encouraging, and explain the "why" in Portuguese (e.g., prepositions, false friends, word order).
 - Output ONLY pure JSON. No markdown backticks, no conversational preamble.`;
 
+export interface LlmResponse {
+  content: string;
+  finishReason: 'stop' | 'length' | 'content_filter' | 'tool_calls' | '';
+}
+
 /**
- * Generic helper to send structured completions to the configured local/remote LLM,
- * strip markdown code fences, parse JSON, and validate against a Zod schema.
+ * Low-level chat completion request against the configured local/remote LLM.
  */
-export async function callLlmJson<T>(params: {
+export async function requestChatCompletion(params: {
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-  schema: z.ZodType<T>;
   temperature?: number;
   maxTokens?: number;
-}): Promise<T> {
+  jsonMode?: boolean;
+}): Promise<LlmResponse> {
   const env = getEnv();
   const endpoint = `${env.LLM_BASE_URL.replace(/\/+$/, '')}/chat/completions`;
   const headers: Record<string, string> = {
@@ -63,8 +67,11 @@ export async function callLlmJson<T>(params: {
     model: env.LLM_MODEL,
     messages: params.messages,
     temperature: params.temperature ?? 0.2,
-    response_format: { type: 'json_object' },
   };
+
+  if (params.jsonMode) {
+    payload.response_format = { type: 'json_object' };
+  }
 
   if (params.maxTokens) {
     payload.max_tokens = params.maxTokens;
@@ -85,10 +92,33 @@ export async function callLlmJson<T>(params: {
 
   const data = await response.json();
   const rawContent = data.choices?.[0]?.message?.content;
+  const finishReason = data.choices?.[0]?.finish_reason || '';
 
   if (!rawContent) {
     throw new Error('LLM returned an empty response');
   }
+
+  return {
+    content: rawContent,
+    finishReason,
+  };
+}
+
+/**
+ * Structured JSON completion with markdown-fence stripping and chat-style recovery.
+ */
+export async function callLlmJson<T>(params: {
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  schema: z.ZodType<T>;
+  temperature?: number;
+  maxTokens?: number;
+}): Promise<T> {
+  const { content: rawContent } = await requestChatCompletion({
+    messages: params.messages,
+    temperature: params.temperature,
+    maxTokens: params.maxTokens,
+    jsonMode: true,
+  });
 
   // Extract JSON object if wrapped in conversational text or markdown code fences
   let cleaned = rawContent.trim();
@@ -99,6 +129,7 @@ export async function callLlmJson<T>(params: {
   } else if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
   }
+
   try {
     const parsed = JSON.parse(cleaned);
     return params.schema.parse(parsed);
@@ -107,6 +138,53 @@ export async function callLlmJson<T>(params: {
     console.error('Failed to parse LLM structured output:', rawContent);
     throw new Error(`Failed to parse LLM structured output: ${errorMessage}`);
   }
+}
+
+/**
+ * Markdown completion with automatic continuation when `maxTokens` truncates output.
+ * Feeds the partial assistant turn back and asks the model to keep going, so the
+ * final content is never silently cut (A3).
+ */
+export async function callLlmMarkdown(params: {
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  temperature?: number;
+  maxTokens?: number;
+  maxContinuations?: number;
+}): Promise<string> {
+  const maxContinuations = params.maxContinuations ?? 3;
+  let messages: LlmResponse['content'][] = [];
+
+  let result = '';
+  let continuation = 0;
+  let messagesBase = [...params.messages];
+
+  for (;;) {
+    const response = await requestChatCompletion({
+      messages: messagesBase,
+      temperature: params.temperature,
+      maxTokens: params.maxTokens,
+    });
+
+    result += response.content;
+
+    if (response.finishReason === 'length' && continuation < maxContinuations) {
+      continuation++;
+      messagesBase = [
+        ...messagesBase,
+        { role: 'assistant' as const, content: response.content },
+        {
+          role: 'user' as const,
+          content:
+            'Continúa exactamente donde te quedaste, sin repetir contenido y manteniendo el formato, hasta completar la sección.',
+        },
+      ];
+      continue;
+    }
+
+    break;
+  }
+
+  return result;
 }
 
 export async function refinePrompt(rawInput: string): Promise<RefineResult> {

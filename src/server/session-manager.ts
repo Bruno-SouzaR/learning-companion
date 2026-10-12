@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import matter from 'gray-matter';
 import { getDb } from './db';
+import { getWikiDir } from './paths';
 import { slugify, saveEnglishPracticeEntry } from './wiki-store';
 
 export interface SessionCheckpoint {
@@ -36,7 +37,7 @@ export interface SessionTurn {
   created_at: string;
 }
 
-const WIKI_DIR = path.join(process.cwd(), 'data', 'wiki');
+const WIKI_DIR = getWikiDir();
 const EPISODIC_DIR = path.join(WIKI_DIR, 'episodic');
 const SEMANTIC_DIR = path.join(WIKI_DIR, 'semantic');
 

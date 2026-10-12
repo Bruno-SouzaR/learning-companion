@@ -3,6 +3,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import matter from 'gray-matter';
 import { getDb } from './db';
+import { getWikiDir } from './paths';
 import { generateEmbedding } from './embeddings';
 import { slugify } from './wiki-store';
 import { scheduleNewEntry } from './srs-engine';
@@ -57,7 +58,7 @@ export interface IngestDocumentResult {
   srsScheduledCount: number;
 }
 
-const WIKI_DIR = path.join(process.cwd(), 'data', 'wiki');
+const WIKI_DIR = getWikiDir();
 const STUDIES_DIR = path.join(WIKI_DIR, 'studies');
 
 /**

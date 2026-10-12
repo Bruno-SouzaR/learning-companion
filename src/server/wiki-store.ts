@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import matter from 'gray-matter';
 import { getDb } from './db';
+import { getWikiDir } from './paths';
 import { generateEmbedding, cosineSimilarity } from './embeddings';
 import { scheduleNewEntry } from './srs-engine';
 
@@ -31,8 +32,8 @@ export interface StoredEntry {
   similarity?: number;
 }
 
-const WIKI_DIR = path.join(process.cwd(), 'data', 'wiki');
-const ENGLISH_DIR = path.join(WIKI_DIR, 'english');
+const WIKI_DIR = getWikiDir();
+const ENGLISH_DIR = path.join(getWikiDir(), 'english');
 
 export function slugify(text: string): string {
   return text

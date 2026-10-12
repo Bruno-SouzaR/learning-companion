@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import matter from 'gray-matter';
 import { getDb } from './db';
+import { getWikiDir } from './paths';
 import { slugify } from './wiki-store';
 import { generateEmbedding } from './embeddings';
-import { callLlmJson } from './llm';
 import { chunkTextBySections, cleanExtractedText, estimateDocumentTokens } from './pdf-extractor';
-import { sectionAnalysisSchema } from './document-ingestor';
+import { synthesizeSection } from './section-synthesizer';
 
 export interface CompletedSectionData {
   sectionIndex: number;
@@ -23,16 +23,33 @@ export interface IngestJob {
   totalSections: number;
   completedSections: CompletedSectionData[];
   filePath?: string | null;
+  entryId?: string | null;
   errorMessage?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-const WIKI_DIR = path.join(process.cwd(), 'data', 'wiki');
+export const INGEST_CHUNK_TOKENS = 4800;
+export const INGEST_RECENT_LIMIT = 10;
+
+const WIKI_DIR = getWikiDir();
 const STUDIES_DIR = path.join(WIKI_DIR, 'studies');
 
+// Jobs actively running in THIS server process. Used to detect jobs orphaned
+// by a previous process restart (stale "processing" rows).
+let runningJobIds: Set<string> | null = null;
+function getRunningJobs(): Set<string> {
+  // Keep a process-global registry that survives module duplication across bundles
+  const g = globalThis as { __lcRunningJobs?: Set<string> };
+  if (!g.__lcRunningJobs) {
+    g.__lcRunningJobs = new Set();
+  }
+  return g.__lcRunningJobs;
+}
+
 /**
- * Create a new background ingestion job record in SQLite.
+ * Create a background ingestion job with a resolved entryId generated at
+ * creation time so quizzes can reference it immediately.
  */
 export function createIngestJob(params: {
   title: string;
@@ -42,12 +59,13 @@ export function createIngestJob(params: {
   const db = getDb();
   const now = new Date().toISOString();
   const id = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const entryId = `studies_${Date.now()}_${slugify(params.title)}`;
 
   db.prepare(`
     INSERT INTO ingest_jobs (
-      id, title, topic, status, total_sections, completed_sections, file_path, error_message, created_at, updated_at
-    ) VALUES (?, ?, ?, 'processing', ?, '[]', NULL, NULL, ?, ?)
-  `).run(id, params.title.trim(), params.topic.trim(), params.totalSections, now, now);
+      id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, created_at, updated_at
+    ) VALUES (?, ?, ?, 'processing', ?, '[]', NULL, ?, NULL, ?, ?)
+  `).run(id, params.title.trim(), params.topic.trim(), params.totalSections, entryId, now, now);
 
   return {
     id,
@@ -57,6 +75,7 @@ export function createIngestJob(params: {
     totalSections: params.totalSections,
     completedSections: [],
     filePath: null,
+    entryId,
     errorMessage: null,
     createdAt: now,
     updatedAt: now,
@@ -64,13 +83,13 @@ export function createIngestJob(params: {
 }
 
 /**
- * Retrieve current status and completed sections for an ingestion job.
+ * Retrieve full status including completed sections for an ingestion job.
  */
 export function getIngestJob(jobId: string): IngestJob | null {
   const db = getDb();
   const row = db
     .prepare(`
-      SELECT id, title, topic, status, total_sections, completed_sections, file_path, error_message, created_at, updated_at
+      SELECT id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, created_at, updated_at
       FROM ingest_jobs
       WHERE id = ?
     `)
@@ -82,6 +101,7 @@ export function getIngestJob(jobId: string): IngestJob | null {
       total_sections: number;
       completed_sections: string;
       file_path: string | null;
+      entry_id: string | null;
       error_message: string | null;
       created_at: string;
       updated_at: string;
@@ -104,10 +124,66 @@ export function getIngestJob(jobId: string): IngestJob | null {
     totalSections: row.total_sections,
     completedSections: completed,
     filePath: row.file_path,
+    entryId: row.entry_id,
     errorMessage: row.error_message,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/**
+ * List recent ingest jobs. Danger: this drives UI continuity, so it must also
+ * reconcile jobs orphaned by a server restart into a visible failed state.
+ */
+export function listRecentIngestJobs(limit = INGEST_RECENT_LIMIT): IngestJob[] {
+  const db = getDb();
+
+  rawReconcileStaleJobs();
+
+  const rows = db
+    .prepare(`
+      SELECT id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, created_at, updated_at
+      FROM ingest_jobs
+      ORDER BY created_at DESC
+      LIMIT ?
+    `)
+    .all(limit) as Array<{
+      id: string;
+      title: string;
+      topic: string;
+      status: string;
+      total_sections: number;
+      completed_sections: string;
+      file_path: string | null;
+      entry_id: string | null;
+      error_message: string | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+
+  return rows.map((row) => {
+    let completed: CompletedSectionData[] = [];
+    try {
+      completed = JSON.parse(row.completed_sections);
+    } catch {
+      completed = [];
+    }
+
+    const statusNorm = row.status as 'queued' | 'processing' | 'completed' | 'failed';
+    return {
+      id: row.id,
+      title: row.title,
+      topic: row.topic,
+      status: statusNorm,
+      totalSections: row.total_sections,
+      completedSections: [],
+      filePath: row.file_path,
+      entryId: row.entry_id,
+      errorMessage: row.error_message,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  });
 }
 
 /**
@@ -191,99 +267,95 @@ export function failIngestJob(jobId: string, error: string): IngestJob {
   };
 }
 
-/**
- * Execute background progressive synthesis for a document.
- * Runs autonomously in server background without blocking HTTP requests.
- */
-export async function processDocumentInBackground(params: {
-  jobId: string;
-  title: string;
-  topic: string;
-  rawText: string;
-  sourceFilename?: string;
-  tags?: string[];
-}): Promise<void> {
-  const cleaned = cleanExtractedText(params.rawText);
-  const chunks = chunkTextBySections(cleaned, 4800);
-  const totalTokens = estimateDocumentTokens(cleaned);
+function rawReconcileStaleJobs(): void {
+  const db = getDb();
+  const running = getRunningJobs();
 
-  if (!fs.existsSync(STUDIES_DIR)) {
-    fs.mkdirSync(STUDIES_DIR, { recursive: true });
+  const orphans = db
+    .prepare(`SELECT id FROM ingest_jobs WHERE status = 'processing'`)
+    .all() as Array<{ id: string }>;
+
+  const nowIso = new Date().toISOString();
+  for (const orphan of orphans) {
+    if (!running.has(orphan.id)) {
+      db.prepare(`
+        UPDATE ingest_jobs
+        SET status = 'failed', error_message = 'Proceso interrumpido por reinicio del servidor.', updated_at = ?
+        WHERE id = ? AND status = 'processing'
+      `).run(nowIso, orphan.id);
+    }
+  }
+}
+
+/**
+ * Execute background progressive synthesis for a document with Markdown output.
+ * Runs autonomously without blocking HTTP requests; survives browser tab changes.
+ */
+export async function processDocumentInBackground(jobId: string, rawText: string): Promise<void> {
+  const db = getDb();
+  const job = getIngestJob(jobId);
+
+  if (!job) {
+    console.error(`[IngestJob ${jobId}] no encontrado para procesar`);
+    return;
   }
 
-  const now = new Date();
-  const dateStr = now.toISOString().split('T')[0];
-  const slug = slugify(params.title);
-  const docId = `studies_${Date.now()}_${slug}`;
-  const filename = `${dateStr}-${slug}.md`;
-  const filePath = path.join(STUDIES_DIR, filename);
+  // Register AS running synchronously BEFORE first await
+  const running = getRunningJobs();
+  running.add(jobId);
 
-  const accumulatedSections: CompletedSectionData[] = [];
+  const accumulated: CompletedSectionData[] = [];
 
   try {
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      const systemPrompt = `You are an academic computer science professor and author of high-level textbooks.
-Your objective is to produce an exhaustive, deep, and beautifully structured textbook chapter in Portuguese from section ${i + 1} of "${params.title}" (Topic: ${params.topic}).
-STRICT RULES:
-1. NO META-COMMENTARY: Do NOT mention "o autor lista", "o documento enumera" or "inventário técnico". Write directly and formally as the textbook author.
-2. CONCRETE DEPTH: For each concept, provide:
-   - Definição Teórica (exact and concise)
-   - Mecanismo & Aplicação Prática (how it works internally)
-   - Exemplo Prático ou Código (concrete real-world engineering scenario or closed markdown code block)
-3. TRADE-OFF MATRIX: Provide a clear comparison markdown table highlighting advantages, disadvantages, and trade-offs.
-Output ONLY pure JSON strictly matching this schema:
-{
-  "section_title": "Título da Seção em português",
-  "key_points": ["Ponto conceitual 1", "Ponto conceitual 2"],
-  "summary_markdown": "Texto profundo e estruturado do capítulo em markdown...",
-  "active_recall_drills": []
-}`;
+    const cleaned = cleanExtractedText(rawText);
+    const chunks = chunkTextBySections(cleaned, INGEST_CHUNK_TOKENS);
+    const totalTokens = estimateDocumentTokens(cleaned);
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const slug = slugify(job.title);
+    const filePath = path.join(STUDIES_DIR, `${dateStr}-${slug}.md`);
 
-      const analysis = await callLlmJson({
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: chunk.content },
-        ],
-        schema: sectionAnalysisSchema,
-        temperature: 0.2,
-        maxTokens: 2500,
+    if (!fs.existsSync(STUDIES_DIR)) {
+      fs.mkdirSync(STUDIES_DIR, { recursive: true });
+    }
+
+    for (let i = 0; i < chunks.length; i++) {
+      const section = await synthesizeSection({
+        title: job.title,
+        topic: job.topic,
+        sectionIndex: i + 1,
+        totalSections: chunks.length,
+        chunkContent: chunks[i].content,
       });
 
       const sectionData: CompletedSectionData = {
         sectionIndex: i + 1,
-        sectionTitle: analysis.section_title,
-        keyPoints: analysis.key_points,
-        markdown: analysis.summary_markdown,
+        sectionTitle: section.sectionTitle,
+        keyPoints: section.keyPoints,
+        markdown: section.markdown,
       };
+      accumulated.push(sectionData);
+      updateJobSection(jobId, sectionData);
 
-      accumulatedSections.push(sectionData);
-
-      // Record progressive update in SQLite job store
-      updateJobSection(params.jobId, sectionData);
-
-      // Progressively update physical markdown file on disk
       const frontmatter = {
-        id: docId,
-        title: params.title.trim(),
+        id: job.entryId,
+        title: job.title,
         slug,
         module: 'studies',
-        topic: params.topic.trim(),
-        source_filename: params.sourceFilename || null,
+        topic: job.topic,
         total_chunks: chunks.length,
         completed_chunks: i + 1,
         total_tokens: totalTokens,
-        tags: params.tags || [params.topic.toLowerCase()],
         created_at: now.toISOString(),
         updated_at: new Date().toISOString(),
       };
 
-      const sectionsMarkdown = accumulatedSections
+      const sectionsMarkdown = accumulated
         .map(
           (s) => `
 ## ${s.sectionIndex}. ${s.sectionTitle}
 
-### Pontos Chave
+### Pontos Nucleares
 ${s.keyPoints.map((kp) => `- ${kp}`).join('\n')}
 
 ${s.markdown}
@@ -292,9 +364,9 @@ ${s.markdown}
         .join('\n\n---\n');
 
       const fullMarkdown = `
-# ${params.title}
+# ${job.title}
 
-**Tópico:** ${params.topic} &bull; **Data:** ${dateStr}
+**Tema:** ${job.topic} &bull; **Fecha:** ${dateStr}
 
 ${sectionsMarkdown}
 `.trim();
@@ -302,34 +374,37 @@ ${sectionsMarkdown}
       fs.writeFileSync(filePath, matter.stringify(fullMarkdown, frontmatter), 'utf-8');
     }
 
-    // Index consolidated document in SQLite entries table
+    // Index the consolidated document into SQLite entries table
     const fullContent = fs.readFileSync(filePath, 'utf-8');
-    const textToEmbed = `${params.title} ${params.topic} ${accumulatedSections.map((s) => s.sectionTitle).join(' ')}`;
+    const textToEmbed = `${job.title} ${job.topic} ${accumulated.map((s) => s.sectionTitle).join(' ')}`;
     const vector = await generateEmbedding(textToEmbed);
 
-    const db = getDb();
+    const finalEntryId = job.entryId || `studies_${Date.now()}_${slug}`;
     db.prepare(`
       INSERT OR REPLACE INTO entries (
         id, slug, file_path, module, title, input_pt, target_en, explanation, tags, embedding, created_at, updated_at
       ) VALUES (?, ?, ?, 'studies', ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      docId,
+      finalEntryId,
       slug,
       filePath,
-      params.title.trim(),
-      params.topic.trim(),
+      job.title,
+      job.topic,
       null,
       fullContent,
-      JSON.stringify(params.tags || [params.topic.toLowerCase()]),
+      JSON.stringify([job.topic.toLowerCase()]),
       vector.length > 0 ? JSON.stringify(vector) : null,
       now.toISOString(),
       now.toISOString()
     );
 
-    completeIngestJob(params.jobId, filePath);
+    completeIngestJob(jobId, filePath);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error during background synthesis';
-    console.error(`[IngestJob ${params.jobId}] Background synthesis failed:`, error);
-    failIngestJob(params.jobId, message);
+    const message = error instanceof Error ? error.message : 'Error desconocido en el sнntesis';
+    console.error(`[IngestJob ${jobId}] sнntesis de fondo falló:`, error);
+    failIngestJob(jobId, message);
+  } finally {
+    running.delete(jobId);
   }
 }
+

@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { extractTextFromPdf, cleanExtractedText, chunkTextBySections } from '@/server/pdf-extractor';
 import {
+  INGEST_CHUNK_TOKENS,
   createIngestJob,
   getIngestJob,
+  listRecentIngestJobs,
   processDocumentInBackground,
 } from '@/server/ingest-job-manager';
 
@@ -20,8 +22,6 @@ export async function POST(request: Request) {
     let title = '';
     let topic = '';
     let text = '';
-    let sourceFilename: string | undefined = undefined;
-    let tags: string[] | undefined = undefined;
 
     // Handle multipart/form-data (PDF file upload)
     if (contentType.includes('multipart/form-data')) {
@@ -38,7 +38,6 @@ export async function POST(request: Request) {
       const file = formData.get('file') as File | null;
       title = (formData.get('title') as string) || '';
       topic = (formData.get('topic') as string) || '';
-      const tagsRaw = formData.get('tags') as string | null;
 
       if (!file) {
         return NextResponse.json(
@@ -57,15 +56,6 @@ export async function POST(request: Request) {
       const buffer = Buffer.from(await file.arrayBuffer());
       const extracted = await extractTextFromPdf(buffer);
       text = extracted.text;
-      sourceFilename = file.name;
-
-      if (tagsRaw) {
-        try {
-          tags = JSON.parse(tagsRaw);
-        } catch {
-          tags = tagsRaw.split(',').map((t) => t.trim()).filter(Boolean);
-        }
-      }
     } else {
       // Handle application/json (Raw text or pasted document)
       const json = await request.json();
@@ -84,7 +74,6 @@ export async function POST(request: Request) {
       title = parsed.data.title;
       topic = parsed.data.topic;
       text = parsed.data.content;
-      tags = parsed.data.tags;
     }
 
     const cleaned = cleanExtractedText(text);
@@ -95,7 +84,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const chunks = chunkTextBySections(cleaned, 4800);
+    const chunks = chunkTextBySections(cleaned, INGEST_CHUNK_TOKENS);
     const totalSections = Math.max(1, chunks.length);
 
     // Create background job
@@ -106,19 +95,13 @@ export async function POST(request: Request) {
     });
 
     // Launch background asynchronous synthesis (does not block HTTP response)
-    void processDocumentInBackground({
-      jobId: job.id,
-      title: title.trim(),
-      topic: topic.trim(),
-      rawText: cleaned,
-      sourceFilename,
-      tags,
-    });
+    void processDocumentInBackground(job.id, cleaned);
 
     return NextResponse.json({
       success: true,
       data: {
         jobId: job.id,
+        entryId: job.entryId,
         title: job.title,
         topic: job.topic,
         totalSections: job.totalSections,
@@ -140,11 +123,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('jobId');
 
+    // No jobId → list recent jobs for UI continuity
     if (!jobId || !jobId.trim()) {
-      return NextResponse.json(
-        { success: false, error: 'Parâmetro jobId é obrigatório.' },
-        { status: 400 }
-      );
+      const recent = listRecentIngestJobs();
+      return NextResponse.json({
+        success: true,
+        data: { jobs: recent },
+      });
     }
 
     const job = getIngestJob(jobId.trim());

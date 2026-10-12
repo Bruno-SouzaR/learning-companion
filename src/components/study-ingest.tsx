@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   UploadCloud,
   FileText,
@@ -39,6 +39,38 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
   // Active Job state (Progressive Ingestion)
   const [activeJob, setActiveJob] = useState<IngestJob | null>(null);
   const [pollInterval, setPollInterval] = useState<number | null>(null);
+
+  // Resume: discover in-flight or recent jobs on mount for continuity
+  const [recentJobs, setRecentJobs] = useState<Array<{ id: string; title: string; status: string; totalSections: number }>>([]);
+
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch('/api/study/ingest');
+        const json = await res.json();
+        if (json.success && json.data?.jobs) {
+          setRecentJobs(json.data.jobs);
+        }
+      } catch (err) {
+        console.error('Falha ao consultar jobs:', err);
+      }
+    }, 5000);
+
+    const bootstrap = async () => {
+      try {
+        const res = await fetch('/api/study/ingest');
+        const json = await res.json();
+        if (json.success && json.data?.jobs) {
+          setRecentJobs(json.data.jobs);
+        }
+      } catch (err) {
+        console.error('Falha ao listar jobs iniciais:', err);
+      }
+    };
+    void bootstrap();
+    return () => clearInterval(timer);
+  }, []);
+
 
   // Quiz state
   const [quizSession, setQuizSession] = useState<QuizSession | null>(null);
@@ -159,6 +191,18 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
     }
   }
 
+  async function handleOpenJob(jobId: string) {
+    try {
+      const res = await fetch(`/api/study/ingest?jobId=${encodeURIComponent(jobId)}`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        setActiveJob(json.data);
+      }
+    } catch (err) {
+      console.error('Falha ao abrir job:', err);
+    }
+  }
+
   async function handleGenerateQuiz(count = 10) {
     if (!activeJob) return;
 
@@ -166,8 +210,7 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
     setErrorMessage(null);
 
     try {
-      // Find study entry id associated with the job
-      const studyEntryId = `studies_${activeJob.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      const studyEntryId = activeJob.entryId || activeJob.id;
       const res = await fetch('/api/study/quiz/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -639,8 +682,40 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
   }
 
   // 4. INITIAL INGESTION FORM VIEW
+  const banner = recentJobs.length > 0 ? (
+    <div className="space-y-3 rounded-xl bg-slate-800/50 border border-slate-700/60 p-4">
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block">
+        Continuidade de Material em Procesamento
+      </span>
+      <div className="space-y-1.5">
+        {recentJobs.slice(0, 5).map((job) => (
+          <button
+            key={job.id}
+            onClick={() => handleOpenJob(job.id)}
+            className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-300 hover:bg-slate-700/50 bg-slate-800/30 border border-slate-800 transition-colors cursor-pointer"
+          >
+            <span className="truncate">{job.title}</span>
+            <span className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-semibold ${
+              job.status === 'completed' ? 'bg-emerald-900/70 text-emerald-300'
+              : job.status === 'failed' ? 'bg-rose-900/70 text-rose-300'
+              : 'bg-indigo-900/70 text-indigo-300'
+            }`}>
+              {job.status === 'completed' ? `Completado · ${job.totalSections}p`
+              : job.status === 'failed' ? 'Falido'
+              : `Procesando · ${job.totalSections}p`}
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className="text-[11px] text-slate-400">
+        Selecciona un trabajo para reanudar la lectura o la evaluación. La síntesis continua en segundo plano aunque cierres esta pestaña.
+      </p>
+    </div>
+  ) : null;
+
   return (
     <div className="w-full space-y-5 bg-slate-900/60 border border-slate-800 rounded-xl p-5 md:p-6 shadow-xl backdrop-blur-sm">
+      {banner}
       {/* Mode Selector Tabs */}
       <div className="flex items-center justify-between pb-3 border-b border-slate-800">
         <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Formato de Entrada</span>
