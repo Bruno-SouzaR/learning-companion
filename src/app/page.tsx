@@ -95,9 +95,9 @@ export default function Home() {
         {activeTab === 'english' ? (
           <div className="flex-1 flex flex-col w-full">
             {!refinedResult ? (
-              <div className="flex-1 flex flex-col w-full max-w-3xl mx-auto">
-                {/* Title and Hero Section positioned close to the top */}
-                <div className="text-center space-y-2 pt-2 sm:pt-4">
+              <div className="flex-1 flex flex-col w-full max-w-3xl mx-auto pt-[10vh] sm:pt-[13vh]">
+                {/* Title and Hero Section shifted down by ~14% */}
+                <div className="text-center space-y-2">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 shadow-sm">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                     <span>English Pre-Flight &bull; Pedagogia Local</span>
@@ -110,8 +110,8 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* Input Card centered in the remaining space */}
-                <div className="my-auto w-full py-4">
+                {/* Input Card maintaining relative distance */}
+                <div className="w-full mt-28 sm:mt-36 pb-6">
                   <EnglishPreFlight
                     onRefined={handleRefined}
                     isLoading={isLoading}
