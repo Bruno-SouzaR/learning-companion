@@ -70,7 +70,7 @@ export function EnglishPreFlight({
         value={inputText}
         onChange={(e) => setInputText(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Escreva em português, inglês informal ou misturado... (Ex: 'eu estava querendo aprimorar meu ingles, seria possivel nos criarmos uma regra para me retornar a maneira correta?')"
+        placeholder="Escreva em português, inglês informal ou misturado..."
         className="w-full bg-slate-950/80 border border-slate-800 rounded-lg p-3.5 text-slate-100 placeholder-slate-500 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-y"
         disabled={isLoading}
       />
