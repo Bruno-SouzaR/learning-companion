@@ -18,6 +18,9 @@ export function getDb(): DatabaseSync {
 
   // Initialize schema
   dbInstance.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA busy_timeout = 5000;
+
     CREATE TABLE IF NOT EXISTS entries (
       id TEXT PRIMARY KEY,
       slug TEXT NOT NULL,

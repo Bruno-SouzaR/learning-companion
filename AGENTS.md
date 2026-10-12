@@ -71,10 +71,23 @@ src/components/active-recall.tsx (UI) ──────→ src/app/api/save/rou
 | Start production server    | `./start.sh` or `pnpm start`                           |
 | Build for production       | `pnpm build`                                           |
 | Typecheck (TypeScript)     | `pnpm typecheck`                                       |
+| Run test suite             | `pnpm test`                                            |
+| Run test suite in watch    | `pnpm test:watch`                                      |
 | Start local LLM (Vulkan)   | `systemctl --user start learning-llm.service`          |
+
+## Testing Standards & Quality Gates
+
+1. **Never Alter Tests to Bypass Failures**: You MUST NEVER modify, weaken, or delete existing tests to force failing code or half-baked implementations to pass. If an existing test breaks, the production implementation is considered defective and must be fixed.
+2. **Feature Acceptance Criteria**: A feature is considered successfully implemented ONLY when all automated tests pass (`pnpm test`), TypeScript diagnostics are clean (`pnpm typecheck`), and the production build compiles cleanly (`pnpm build`).
+3. **Mandatory Happy Path & Edge Case Coverage**: Every new feature, service module, or domain utility MUST be accompanied by comprehensive tests covering both:
+   - **Happy Path**: Standard, intended operational flow.
+   - **Edge Cases**: Empty or whitespace inputs, invalid boundary values, malformed payloads, unicode/accented strings, and error/exception handling.
+4. **Regression Safeguards**: Fixed bugs and user-stipulated invariants must have permanent regression tests in `tests/regression/`.
 
 ## Invariants & Prohibitions
 
+- Never modify, relax, or delete test assertions to bypass failures.
+- Never mark a feature or task complete without running and passing the entire test suite (`pnpm test`).
 - Never use cloud storage or network APIs for embeddings: embeddings MUST run 100% in-process via `@xenova/transformers`.
 - Never show the Active Recall word diff in real-time while typing: the diff MUST only appear on demand and immediately hide upon re-typing.
 - Never commit secrets, real `.env` files, or the SQLite cache file (`data/cache.db`).

@@ -29,6 +29,5 @@ yarn-error.log*
 .env
 
 # data cache and local models
-data/cache.db
-data/cache.db-journal
+data/cache.db*
 .cache/
