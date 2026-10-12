@@ -62,9 +62,6 @@ export function EnglishPreFlight({
           <Sparkles className="w-4 h-4 text-indigo-400" />
           O que você quer dizer?
         </label>
-        <span className="text-xs text-slate-400 hidden sm:inline">
-          <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono">Enter</kbd> para analisar &bull; <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono">Shift+Enter</kbd> pula linha
-        </span>
       </div>
 
       <textarea
