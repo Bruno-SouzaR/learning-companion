@@ -46,7 +46,7 @@ export function EnglishPreFlight({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleRefine();
     }
@@ -63,7 +63,7 @@ export function EnglishPreFlight({
           O que você quer dizer?
         </label>
         <span className="text-xs text-slate-400 hidden sm:inline">
-          Pressione <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">⌘+Enter</kbd> ou <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">Ctrl+Enter</kbd>
+          <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono">Enter</kbd> para analisar &bull; <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono">Shift+Enter</kbd> pula linha
         </span>
       </div>
 
@@ -92,7 +92,7 @@ export function EnglishPreFlight({
         <button
           onClick={handleRefine}
           disabled={!inputText.trim() || isLoading}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white shadow-lg shadow-indigo-600/20 transition-all cursor-pointer disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white shadow-lg shadow-indigo-600/20 transition-all cursor-pointer disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
         >
           {isLoading ? (
             <>
@@ -102,6 +102,7 @@ export function EnglishPreFlight({
           ) : (
             <>
               <span>Analisar e Aprender</span>
+              <kbd className="hidden sm:inline-flex text-[10px] bg-indigo-700/80 px-1.5 py-0.5 rounded text-indigo-200 border border-indigo-400/30">Enter</kbd>
               <ArrowRight className="w-4 h-4" />
             </>
           )}
