@@ -83,16 +83,16 @@ export async function ingestDocument(params: IngestDocumentParams): Promise<Inge
     const chunk = chunks[i];
     const systemPrompt = `You are a high-level academic tutor and software engineering professor.
 Analyze the provided material from chapter/section ${i + 1} of "${params.title}" (Topic: ${params.topic}).
-Provide a deep, structured pedagogical explanation in Portuguese and extract 2-3 active recall questions with clear expected answers.
+Provide a dense, well-structured pedagogical summary in Portuguese (2-3 concise paragraphs) and extract exactly 2 active recall questions with clear, direct answers.
 Output ONLY pure JSON strictly matching this schema:
 {
   "section_title": "Título do Tópico em português",
-  "key_points": ["Ponto 1", "Ponto 2"],
-  "summary_markdown": "Resumo detalhado em markdown...",
+  "key_points": ["Ponto principal 1", "Ponto principal 2"],
+  "summary_markdown": "Resumo estruturado em português...",
   "active_recall_drills": [
     {
       "question": "Pergunta conceitual para fixação?",
-      "expected_answer": "Resposta esperada detalhada",
+      "expected_answer": "Resposta direta e precisa",
       "cloze_hint": "Dica com lacuna opcional"
     }
   ]
@@ -105,7 +105,7 @@ Output ONLY pure JSON strictly matching this schema:
       ],
       schema: sectionAnalysisSchema,
       temperature: 0.2,
-      maxTokens: 1200,
+      maxTokens: 2500,
     });
 
     sections.push({

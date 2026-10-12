@@ -90,12 +90,15 @@ export async function callLlmJson<T>(params: {
     throw new Error('LLM returned an empty response');
   }
 
-  // Strip markdown code fences if model enclosed JSON in ```json ... ```
+  // Extract JSON object if wrapped in conversational text or markdown code fences
   let cleaned = rawContent.trim();
-  if (cleaned.startsWith('```')) {
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+  } else if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
   }
-
   try {
     const parsed = JSON.parse(cleaned);
     return params.schema.parse(parsed);

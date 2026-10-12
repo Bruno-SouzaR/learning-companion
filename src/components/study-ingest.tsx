@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   UploadCloud,
   FileText,
@@ -14,36 +14,73 @@ import {
   AlertCircle,
   Tag,
   RotateCcw,
+  Trophy,
+  HelpCircle,
+  RefreshCw,
 } from 'lucide-react';
-import type { IngestDocumentResult } from '@/server/document-ingestor';
+import type { IngestJob, CompletedSectionData } from '@/server/ingest-job-manager';
+import type { QuizSession, QuizEvaluationResult } from '@/server/quiz-engine';
 
 interface StudyIngestProps {
-  onIngested?: (result: IngestDocumentResult) => void;
   onNavigateToRecords?: () => void;
 }
 
-export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProps) {
+export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
+  // Input form state
   const [inputMode, setInputMode] = useState<'file' | 'text'>('file');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [textContent, setTextContent] = useState('');
   const [title, setTitle] = useState('');
   const [topic, setTopic] = useState('');
   const [tagsInput, setTagsInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [result, setResult] = useState<IngestDocumentResult | null>(null);
+
+  // Active Job state (Progressive Ingestion)
+  const [activeJob, setActiveJob] = useState<IngestJob | null>(null);
+  const [pollInterval, setPollInterval] = useState<number | null>(null);
+
+  // Quiz state
+  const [quizSession, setQuizSession] = useState<QuizSession | null>(null);
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [isSubmittingQuiz, setIsSubmittingQuiz] = useState(false);
+  const [quizEvaluation, setQuizEvaluation] = useState<QuizEvaluationResult | null>(null);
+
+  // Polling for active background job
+  useEffect(() => {
+    if (!activeJob || activeJob.status === 'completed' || activeJob.status === 'failed') {
+      return;
+    }
+
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/study/ingest?jobId=${encodeURIComponent(activeJob.id)}`);
+        const json = await res.json();
+        if (json.success && json.data) {
+          setActiveJob(json.data);
+          if (json.data.status === 'completed' || json.data.status === 'failed') {
+            clearInterval(timer);
+          }
+        }
+      } catch (err) {
+        console.error('Falha ao consultar status do job:', err);
+      }
+    }, 2500);
+
+    return () => clearInterval(timer);
+  }, [activeJob]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] || null;
     setSelectedFile(file);
     if (file && !title) {
-      // Auto-populate title from clean filename
       const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]+/g, ' ');
       setTitle(cleanName.charAt(0).toUpperCase() + cleanName.slice(1));
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleStartIngestion(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -62,7 +99,7 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
       return;
     }
 
-    setIsLoading(true);
+    setIsStarting(true);
 
     try {
       let res: Response;
@@ -101,21 +138,130 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
       const json = await res.json();
 
       if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Falha ao processar material de estudo.');
+        throw new Error(json.error || 'Falha ao iniciar processamento do documento.');
       }
 
-      setResult(json.data);
-      onIngested?.(json.data);
+      setActiveJob({
+        id: json.data.jobId,
+        title: json.data.title,
+        topic: json.data.topic,
+        status: 'processing',
+        totalSections: json.data.totalSections,
+        completedSections: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro inesperado durante a ingestão.';
+      const message = err instanceof Error ? err.message : 'Erro ao iniciar ingestão.';
       setErrorMessage(message);
     } finally {
-      setIsLoading(false);
+      setIsStarting(false);
     }
   }
 
-  function handleReset() {
-    setResult(null);
+  async function handleGenerateQuiz(count = 10) {
+    if (!activeJob) return;
+
+    setIsGeneratingQuiz(true);
+    setErrorMessage(null);
+
+    try {
+      // Find study entry id associated with the job
+      const studyEntryId = `studies_${activeJob.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      const res = await fetch('/api/study/quiz/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studyEntryId,
+          questionCount: count,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Falha ao gerar simulado.');
+      }
+
+      setQuizSession(json.data);
+      setQuizAnswers({});
+      setQuizEvaluation(null);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao gerar simulado.';
+      setErrorMessage(message);
+    } finally {
+      setIsGeneratingQuiz(false);
+    }
+  }
+
+  async function handleSubmitQuiz(e: React.FormEvent) {
+    e.preventDefault();
+    if (!quizSession) return;
+
+    setIsSubmittingQuiz(true);
+    setErrorMessage(null);
+
+    try {
+      const res = await fetch('/api/study/quiz/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quizId: quizSession.id,
+          answers: quizAnswers,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Falha ao avaliar simulado.');
+      }
+
+      setQuizEvaluation(json.data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao submeter simulado.';
+      setErrorMessage(message);
+    } finally {
+      setIsSubmittingQuiz(false);
+    }
+  }
+
+  async function handleReinforceSection(sectionIndex: number) {
+    if (!quizSession) return;
+
+    setIsGeneratingQuiz(true);
+    setErrorMessage(null);
+
+    try {
+      const res = await fetch('/api/study/quiz/reinforce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quizId: quizSession.id,
+          weakSectionIndex: sectionIndex,
+          count: 5,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Falha ao gerar reforço.');
+      }
+
+      setQuizSession(json.data);
+      setQuizAnswers({});
+      setQuizEvaluation(null);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao gerar reforço de seção.';
+      setErrorMessage(message);
+    } finally {
+      setIsGeneratingQuiz(false);
+    }
+  }
+
+  function handleResetAll() {
+    setActiveJob(null);
+    setQuizSession(null);
+    setQuizAnswers({});
+    setQuizEvaluation(null);
     setSelectedFile(null);
     setTextContent('');
     setTitle('');
@@ -124,120 +270,375 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
     setErrorMessage(null);
   }
 
-  if (result) {
+  // 1. QUIZ ACTIVE EVALUATION VIEW
+  if (quizEvaluation) {
     return (
       <div className="w-full space-y-6 bg-slate-900/60 border border-slate-800 rounded-xl p-5 md:p-7 shadow-xl backdrop-blur-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800">
           <div>
             <div className="flex items-center gap-2">
               <span className="p-1 rounded-md bg-emerald-950/80 border border-emerald-800 text-emerald-400">
-                <CheckCircle2 className="w-4 h-4" />
+                <Trophy className="w-4 h-4" />
               </span>
-              <h3 className="text-lg font-bold text-slate-100">{result.title}</h3>
+              <h3 className="text-lg font-bold text-slate-100">Resultado do Simulado</h3>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Tópico: <strong className="text-slate-300">{result.topic}</strong> &bull; Salvo em{' '}
-              <code className="text-indigo-400 font-mono text-[11px]">{result.filePath}</code>
+              Avaliação de fixação gerada com base no material &bull; Respostas salvas
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={handleReset}
+              onClick={() => {
+                setQuizSession(null);
+                setQuizEvaluation(null);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+            >
+              <span>Voltar ao Resumo</span>
+            </button>
+            <button
+              onClick={() => handleGenerateQuiz(10)}
+              disabled={isGeneratingQuiz}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Novo Simulado</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Score Banner */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-center">
+            <span className="text-xs text-slate-400 block mb-1">Acertos</span>
+            <span className="text-2xl font-extrabold text-emerald-400">
+              {quizEvaluation.score} / {quizEvaluation.totalQuestions}
+            </span>
+          </div>
+
+          <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-center">
+            <span className="text-xs text-slate-400 block mb-1">Aproveitamento</span>
+            <span className="text-2xl font-extrabold text-indigo-400">
+              {quizEvaluation.percentage}%
+            </span>
+          </div>
+
+          <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-center">
+            <span className="text-xs text-slate-400 block mb-1">Diagnóstico</span>
+            <span className="text-sm font-semibold text-slate-200">
+              {quizEvaluation.percentage >= 70 ? 'Domínio Sólido' : 'Requer Reforço'}
+            </span>
+          </div>
+        </div>
+
+        {/* Weak Sections Reinforcement Action */}
+        {quizEvaluation.weakSections.length > 0 && (
+          <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-900/60 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-amber-300 uppercase tracking-wide block">
+                  Pontos Fracos Identificados
+                </span>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Você teve divergências na Seção {quizEvaluation.weakSections.join(', ')}. Deseja fixar o conceito com novas questões sob outra ótica?
+                </p>
+              </div>
+
+              <button
+                onClick={() => handleReinforceSection(quizEvaluation.weakSections[0])}
+                disabled={isGeneratingQuiz}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 shadow transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+              >
+                <BrainCircuit className="w-4 h-4" />
+                <span>Reforçar Seção {quizEvaluation.weakSections[0]} (+5 Questões)</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Detailed Correction */}
+        <div className="space-y-3 pt-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Correção Detalhada Questão por Questão
+          </h4>
+
+          {quizEvaluation.results.map((res, idx) => (
+            <div
+              key={res.questionId}
+              className={`p-4 rounded-lg border text-xs space-y-2 ${
+                res.isCorrect
+                  ? 'bg-emerald-950/20 border-emerald-900/40 text-slate-200'
+                  : 'bg-rose-950/20 border-rose-900/40 text-slate-200'
+              }`}
+            >
+              <div className="flex items-center justify-between font-semibold">
+                <span className="text-sm">
+                  {idx + 1}. {res.question}
+                </span>
+                <span
+                  className={`px-2 py-0.5 rounded text-[11px] ${
+                    res.isCorrect ? 'bg-emerald-900/60 text-emerald-300' : 'bg-rose-900/60 text-rose-300'
+                  }`}
+                >
+                  {res.isCorrect ? 'Correto' : 'Divergente'}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-slate-400 block">Sua Resposta:</span>
+                <p className="italic text-slate-300">{res.userAnswer || '(Em branco)'}</p>
+              </div>
+
+              <div>
+                <span className="text-slate-400 block">Resposta Esperada:</span>
+                <p className="font-medium text-slate-100">{res.expectedAnswer}</p>
+              </div>
+
+              <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-800/60">
+                {res.feedback}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // 2. QUIZ INTERACTIVE QUESTIONNAIRE VIEW
+  if (quizSession) {
+    return (
+      <div className="w-full space-y-6 bg-slate-900/60 border border-slate-800 rounded-xl p-5 md:p-7 shadow-xl backdrop-blur-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded-md bg-indigo-950/80 border border-indigo-800 text-indigo-400">
+                <HelpCircle className="w-4 h-4" />
+              </span>
+              <h3 className="text-lg font-bold text-slate-100">{quizSession.title}</h3>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Responda de memória para testar retenção ativa &bull; As respostas corretas serão reveladas na submissão
+            </p>
+          </div>
+
+          <button
+            onClick={() => setQuizSession(null)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+          >
+            <span>Voltar ao Resumo</span>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmitQuiz} className="space-y-5">
+          {quizSession.questions.map((q, idx) => (
+            <div key={q.id} className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-semibold">
+                  Questão {idx + 1} de {quizSession.questions.length} (Seção {q.sectionIndex})
+                </span>
+                {q.clozeHint && (
+                  <span className="text-[11px] text-slate-400 italic">Dica: {q.clozeHint}</span>
+                )}
+              </div>
+
+              <label htmlFor={q.id} className="text-sm font-medium text-slate-100 block">
+                {q.question}
+              </label>
+
+              <textarea
+                id={q.id}
+                rows={2}
+                value={quizAnswers[q.id] || ''}
+                onChange={(e) => setQuizAnswers({ ...quizAnswers, [q.id]: e.target.value })}
+                placeholder="Digite sua resposta de memória aqui..."
+                disabled={isSubmittingQuiz}
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none"
+              />
+            </div>
+          ))}
+
+          {errorMessage && (
+            <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          <div className="pt-2 flex items-center justify-between">
+            <span className="text-xs text-slate-400">
+              {Object.keys(quizAnswers).filter((k) => (quizAnswers[k] || '').trim().length > 0).length} de{' '}
+              {quizSession.questions.length} respondidas
+            </span>
+
+            <button
+              type="submit"
+              disabled={isSubmittingQuiz}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
+            >
+              {isSubmittingQuiz ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Avaliando...</span>
+                </>
+              ) : (
+                <>
+                  <span>Submeter Respostas e Ver Correção</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  // 3. PROGRESSIVE INGESTION & TEXTBOOK READING VIEW
+  if (activeJob) {
+    const isCompleted = activeJob.status === 'completed';
+    const isFailed = activeJob.status === 'failed';
+    const completedCount = activeJob.completedSections.length;
+    const progressPercent = Math.min(100, Math.round((completedCount / Math.max(1, activeJob.totalSections)) * 100));
+
+    return (
+      <div className="w-full space-y-6 bg-slate-900/60 border border-slate-800 rounded-xl p-5 md:p-7 shadow-xl backdrop-blur-sm">
+        {/* Header & Stepper */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2">
+              {isCompleted ? (
+                <span className="p-1 rounded-md bg-emerald-950/80 border border-emerald-800 text-emerald-400">
+                  <CheckCircle2 className="w-4 h-4" />
+                </span>
+              ) : isFailed ? (
+                <span className="p-1 rounded-md bg-rose-950/80 border border-rose-800 text-rose-400">
+                  <AlertCircle className="w-4 h-4" />
+                </span>
+              ) : (
+                <span className="p-1 rounded-md bg-indigo-950/80 border border-indigo-800 text-indigo-400 animate-pulse">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                </span>
+              )}
+              <h3 className="text-lg font-bold text-slate-100">{activeJob.title}</h3>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Tópico: <strong className="text-slate-300">{activeJob.topic}</strong> &bull;{' '}
+              {isCompleted
+                ? 'Síntese completa concluída'
+                : isFailed
+                ? `Erro: ${activeJob.errorMessage || 'Falha no processamento'}`
+                : `Processando com Gemma 4 (Seção ${completedCount + 1} de ${activeJob.totalSections})...`}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleResetAll}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Ingerir Outro</span>
             </button>
-            {onNavigateToRecords && (
+            {isCompleted && onNavigateToRecords && (
               <button
                 onClick={onNavigateToRecords}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
               >
                 <BookOpen className="w-3.5 h-3.5" />
-                <span>Ver no Caderno</span>
+                <span>Caderno</span>
+              </button>
+            )}
+            {isCompleted && (
+              <button
+                onClick={() => handleGenerateQuiz(10)}
+                disabled={isGeneratingQuiz}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isGeneratingQuiz ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Gerando Simulado...</span>
+                  </>
+                ) : (
+                  <>
+                    <BrainCircuit className="w-3.5 h-3.5" />
+                    <span>Iniciar Simulado (10 Questões)</span>
+                  </>
+                )}
               </button>
             )}
           </div>
         </div>
 
-        {/* Ingestion Metrics Overview */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 bg-slate-950/60 rounded-lg border border-slate-800">
-            <span className="text-[11px] text-slate-400 uppercase tracking-wider block">Seções</span>
-            <span className="text-lg font-bold text-slate-200">{result.sections.length}</span>
-          </div>
-          <div className="p-3 bg-slate-950/60 rounded-lg border border-slate-800">
-            <span className="text-[11px] text-slate-400 uppercase tracking-wider block">Tokens</span>
-            <span className="text-lg font-bold text-indigo-400">~{result.totalTokens}</span>
-          </div>
-          <div className="p-3 bg-slate-950/60 rounded-lg border border-slate-800">
-            <span className="text-[11px] text-slate-400 uppercase tracking-wider block">Questões</span>
-            <span className="text-lg font-bold text-emerald-400">{result.drills.length}</span>
-          </div>
-          <div className="p-3 bg-slate-950/60 rounded-lg border border-slate-800">
-            <span className="text-[11px] text-slate-400 uppercase tracking-wider block">Fila SRS</span>
-            <span className="text-lg font-bold text-amber-400">{result.srsScheduledCount} agendadas</span>
-          </div>
-        </div>
-
-        {/* Section Summaries Accordion/Cards */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Resumos Seccionais Gerados</span>
-          </h4>
-
-          {result.sections.map((section, idx) => (
-            <div key={idx} className="p-4 rounded-lg bg-slate-950/80 border border-slate-800 space-y-2">
-              <h5 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                <span className="text-xs px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
-                  Seção {idx + 1}
-                </span>
-                {section.sectionTitle}
-              </h5>
-              <ul className="text-xs text-slate-300 space-y-1 pl-4 list-disc marker:text-indigo-400">
-                {section.keyPoints.map((kp, kIdx) => (
-                  <li key={kIdx}>{kp}</li>
-                ))}
-              </ul>
-              <div className="pt-2 text-xs text-slate-400 leading-relaxed border-t border-slate-800/80">
-                {section.summaryText}
-              </div>
+        {/* Progress Stepper Bar */}
+        {!isCompleted && !isFailed && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>
+                Fatia <strong>{completedCount}</strong> de <strong>{activeJob.totalSections}</strong> pronta para leitura
+              </span>
+              <span className="font-mono text-indigo-400">{progressPercent}%</span>
             </div>
-          ))}
-        </div>
-
-        {/* Active Recall Drills Preview */}
-        {result.drills.length > 0 && (
-          <div className="space-y-3 pt-2 border-t border-slate-800">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-              <BrainCircuit className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Questões de Fixação Adicionadas ao SRS</span>
-            </h4>
-            <div className="grid grid-cols-1 gap-2.5">
-              {result.drills.map((drill, idx) => (
-                <div key={idx} className="p-3.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1.5">
-                  <span className="text-xs font-semibold text-slate-200 block">
-                    Q{idx + 1}: {drill.question}
-                  </span>
-                  <p className="text-xs text-slate-400">
-                    <strong className="text-emerald-400">Resposta Esperada:</strong> {drill.expectedAnswer}
-                  </p>
-                  {drill.clozeHint && (
-                    <span className="inline-block text-[11px] font-mono text-indigo-300 bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-900/60">
-                      Lacuna: {drill.clozeHint}
-                    </span>
-                  )}
-                </div>
-              ))}
+            <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-indigo-500 h-full transition-all duration-500 rounded-full"
+                style={{ width: `${progressPercent}%` }}
+              />
             </div>
           </div>
         )}
+
+        {/* Progressive Section Reading Stream */}
+        <div className="space-y-5">
+          {activeJob.completedSections.map((sec) => (
+            <article
+              key={sec.sectionIndex}
+              className="p-5 md:p-6 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 shadow-sm"
+            >
+              <div className="flex items-center gap-2 pb-2 border-b border-slate-800/80">
+                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                  Seção {sec.sectionIndex}
+                </span>
+                <h4 className="text-base font-bold text-slate-100">{sec.sectionTitle}</h4>
+              </div>
+
+              {sec.keyPoints && sec.keyPoints.length > 0 && (
+                <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800/60">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+                    Pontos Nucleares:
+                  </span>
+                  <ul className="text-xs text-slate-300 space-y-1 pl-4 list-disc marker:text-indigo-400">
+                    {sec.keyPoints.map((kp, kIdx) => (
+                      <li key={kIdx}>{kp}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="text-sm text-slate-200 leading-relaxed whitespace-pre-line">
+                {sec.markdown}
+              </div>
+            </article>
+          ))}
+
+          {!isCompleted && !isFailed && (
+            <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center space-y-2">
+              <Loader2 className="w-5 h-5 animate-spin text-indigo-400 mx-auto" />
+              <p className="text-xs text-slate-400">
+                Sintetizando Seção {completedCount + 1} de {activeJob.totalSections} em segundo plano...
+              </p>
+              <span className="text-[11px] text-slate-400 block">
+                Você pode começar a ler as seções acima imediatamente. O progresso continua mesmo se você sair.
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
+  // 4. INITIAL INGESTION FORM VIEW
   return (
     <div className="w-full space-y-5 bg-slate-900/60 border border-slate-800 rounded-xl p-5 md:p-6 shadow-xl backdrop-blur-sm">
       {/* Mode Selector Tabs */}
@@ -271,7 +672,7 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleStartIngestion} className="space-y-4">
         {/* Dual Input: File Dropzone or Textarea */}
         {inputMode === 'file' ? (
           <div>
@@ -283,7 +684,7 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
                 type="file"
                 accept=".pdf,application/pdf"
                 onChange={handleFileChange}
-                disabled={isLoading}
+                disabled={isStarting}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
               />
               <div className="flex flex-col items-center justify-center space-y-2 pointer-events-none">
@@ -312,7 +713,10 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
           </div>
         ) : (
           <div>
-            <label htmlFor="study-text-input" className="text-xs font-semibold uppercase tracking-wider text-slate-300 block mb-1.5">
+            <label
+              htmlFor="study-text-input"
+              className="text-xs font-semibold uppercase tracking-wider text-slate-300 block mb-1.5"
+            >
               Conteúdo do Documento ou Artigo
             </label>
             <textarea
@@ -321,7 +725,7 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
               value={textContent}
               onChange={(e) => setTextContent(e.target.value)}
               placeholder="Cole aqui o conteúdo de um capítulo, anotações de aula ou artigo técnico..."
-              disabled={isLoading}
+              disabled={isStarting}
               className="w-full bg-slate-950/80 border border-slate-800 rounded-lg p-3.5 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-y"
             />
           </div>
@@ -330,7 +734,10 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
         {/* Metadata Inputs: Title & Topic */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label htmlFor="study-title" className="text-xs font-semibold uppercase tracking-wider text-slate-300 block mb-1.5">
+            <label
+              htmlFor="study-title"
+              className="text-xs font-semibold uppercase tracking-wider text-slate-300 block mb-1.5"
+            >
               Título do Material
             </label>
             <input
@@ -338,14 +745,17 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ex: Sistemas Distribuídos: Teorema CAP"
-              disabled={isLoading}
+              placeholder="Ex: Sistemas de Arquivos: Estrutura e Cache"
+              disabled={isStarting}
               className="w-full bg-slate-950/80 border border-slate-800 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
             />
           </div>
 
           <div>
-            <label htmlFor="study-topic" className="text-xs font-semibold uppercase tracking-wider text-slate-300 block mb-1.5">
+            <label
+              htmlFor="study-topic"
+              className="text-xs font-semibold uppercase tracking-wider text-slate-300 block mb-1.5"
+            >
               Tópico / Disciplina
             </label>
             <input
@@ -353,8 +763,8 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
               type="text"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="Ex: Arquitetura de Software"
-              disabled={isLoading}
+              placeholder="Ex: Sistemas Operacionais"
+              disabled={isStarting}
               className="w-full bg-slate-950/80 border border-slate-800 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
             />
           </div>
@@ -362,7 +772,10 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
 
         {/* Tags */}
         <div>
-          <label htmlFor="study-tags" className="text-xs font-semibold uppercase tracking-wider text-slate-300 block mb-1.5">
+          <label
+            htmlFor="study-tags"
+            className="text-xs font-semibold uppercase tracking-wider text-slate-300 block mb-1.5"
+          >
             Tags (separadas por vírgula)
           </label>
           <input
@@ -370,8 +783,8 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
             type="text"
             value={tagsInput}
             onChange={(e) => setTagsInput(e.target.value)}
-            placeholder="Ex: computação, bancos-de-dados, acid"
-            disabled={isLoading}
+            placeholder="Ex: so, fs, inodes, cache"
+            disabled={isStarting}
             className="w-full bg-slate-950/80 border border-slate-800 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
           />
         </div>
@@ -387,22 +800,22 @@ export function StudyIngest({ onIngested, onNavigateToRecords }: StudyIngestProp
         {/* Action Button */}
         <div className="pt-2 flex items-center justify-between">
           <span className="text-xs text-slate-400 hidden sm:inline">
-            Gera resumos seccionais, cartões no wiki e agendamento no SRS.
+            Inicia síntese autônoma com entrega progressiva de seções.
           </span>
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isStarting}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white shadow-lg shadow-indigo-600/20 transition-all cursor-pointer disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
-            {isLoading ? (
+            {isStarting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Processando com Gemma 4...</span>
+                <span>Iniciando Job...</span>
               </>
             ) : (
               <>
-                <span>Ingerir e Gerar Questões</span>
+                <span>Iniciar Síntese do Material</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}

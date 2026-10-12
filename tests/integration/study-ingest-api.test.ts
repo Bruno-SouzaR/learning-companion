@@ -46,11 +46,9 @@ describe('Integration: Study Ingest API Route', () => {
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.data.title).toBe('Sistemas Operacionais: Memória Virtual');
-    expect(json.data.drills).toHaveLength(1);
-
-    if (json.data.filePath) {
-      createdFiles.push(json.data.filePath);
-    }
+    expect(json.data.jobId).toBeDefined();
+    expect(json.data.status).toBe('processing');
+    expect(json.data.totalSections).toBeGreaterThanOrEqual(1);
   });
 
   describe('Validation & Edge Cases', () => {

@@ -237,7 +237,7 @@ export function buildPromptContext(
       SELECT role, content
       FROM session_turns
       WHERE session_id = ?
-      ORDER BY created_at DESC
+      ORDER BY created_at DESC, rowid DESC
       LIMIT 2
     `)
     .all(sessionId) as Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;

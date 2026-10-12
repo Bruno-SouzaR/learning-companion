@@ -83,6 +83,50 @@ export function getDb(): DatabaseSync {
 
     CREATE INDEX IF NOT EXISTS idx_srs_next_review ON srs_items(next_review_at ASC);
     CREATE INDEX IF NOT EXISTS idx_srs_module ON srs_items(module);
+
+    CREATE TABLE IF NOT EXISTS ingest_jobs (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      topic TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued',
+      total_sections INTEGER NOT NULL DEFAULT 0,
+      completed_sections TEXT NOT NULL DEFAULT '[]',
+      file_path TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS study_quizzes (
+      id TEXT PRIMARY KEY,
+      study_entry_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      topic TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      total_questions INTEGER NOT NULL DEFAULT 0,
+      score INTEGER,
+      weak_sections TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS quiz_questions (
+      id TEXT PRIMARY KEY,
+      quiz_id TEXT NOT NULL,
+      section_index INTEGER NOT NULL DEFAULT 0,
+      question TEXT NOT NULL,
+      expected_answer TEXT NOT NULL,
+      cloze_hint TEXT,
+      user_answer TEXT,
+      is_correct INTEGER,
+      feedback TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(quiz_id) REFERENCES study_quizzes(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_jobs_status ON ingest_jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_quizzes_entry ON study_quizzes(study_entry_id);
+    CREATE INDEX IF NOT EXISTS idx_quiz_questions_quiz ON quiz_questions(quiz_id);
   `);
 
   return dbInstance;
