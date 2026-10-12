@@ -327,275 +327,6 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
     setErrorMessage(null);
   }
 
-  // 1. QUIZ ACTIVE EVALUATION VIEW
-  if (quizEvaluation) {
-    return (
-      <div className="w-full space-y-6 bg-slate-900/60 border border-slate-800 rounded-xl p-5 md:p-7 shadow-xl backdrop-blur-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="p-1 rounded-md bg-emerald-950/80 border border-emerald-800 text-emerald-400">
-                <Trophy className="w-4 h-4" />
-              </span>
-              <h3 className="text-lg font-bold text-slate-100">Resultado do Simulado</h3>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Avaliação de fixação gerada com base no material &bull; Respostas salvas
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setQuizSession(null);
-                setQuizEvaluation(null);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
-            >
-              <span>Voltar ao Resumo</span>
-            </button>
-            <button
-              onClick={() => handleGenerateQuiz(10)}
-              disabled={isGeneratingQuiz}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Novo Simulado</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Score Banner */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-center">
-            <span className="text-xs text-slate-400 block mb-1">Acertos</span>
-            <span className="text-2xl font-extrabold text-emerald-400">
-              {quizEvaluation.score} / {quizEvaluation.totalQuestions}
-            </span>
-          </div>
-
-          <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-center">
-            <span className="text-xs text-slate-400 block mb-1">Aproveitamento</span>
-            <span className="text-2xl font-extrabold text-indigo-400">
-              {quizEvaluation.percentage}%
-            </span>
-          </div>
-
-          <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-center">
-            <span className="text-xs text-slate-400 block mb-1">Diagnóstico</span>
-            <span className="text-sm font-semibold text-slate-200">
-              {quizEvaluation.percentage >= 70 ? 'Domínio Sólido' : 'Requer Reforço'}
-            </span>
-          </div>
-        </div>
-
-        {/* Weak Sections Reinforcement Action */}
-        {quizEvaluation.weakSections.length > 0 && (
-          <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-900/60 space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-amber-300 uppercase tracking-wide block">
-                  Pontos Fracos Identificados
-                </span>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  Você teve divergências na Seção {quizEvaluation.weakSections.join(', ')}. Deseja fixar o conceito com novas questões sob outra ótica?
-                </p>
-              </div>
-
-              <button
-                onClick={() => handleReinforceSection(quizEvaluation.weakSections[0])}
-                disabled={isGeneratingQuiz}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 shadow transition-colors cursor-pointer shrink-0 disabled:opacity-50"
-              >
-                <BrainCircuit className="w-4 h-4" />
-                <span>Reforçar Seção {quizEvaluation.weakSections[0]} (+5 Questões)</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Detailed Correction */}
-        <div className="space-y-3 pt-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Correção Detalhada Questão por Questão
-          </h4>
-
-          {quizEvaluation.results.map((res, idx) => {
-            const isCardExpanded = expandedQuizCardId === res.questionId;
-            return (
-              <div
-                key={res.questionId}
-                className={`bg-slate-900/60 border rounded-xl p-4.5 transition-all shadow-sm ${
-                  res.isCorrect ? 'border-emerald-900/50 hover:border-emerald-800' : 'border-rose-900/50 hover:border-rose-800'
-                }`}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2 mb-1.5">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                          res.isCorrect
-                            ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60'
-                            : 'bg-rose-950/80 text-rose-300 border border-rose-800/60'
-                        }`}
-                      >
-                        {res.isCorrect ? 'Acerto' : 'Revisar'}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800 font-mono">
-                        Seção {res.sectionIndex}
-                      </span>
-                      <h4 className="text-sm font-semibold text-slate-100">
-                        Questão {idx + 1}
-                      </h4>
-                    </div>
-
-                    <p className="text-xs sm:text-sm font-medium text-slate-200 mt-1">
-                      {res.question}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setExpandedQuizCardId(isCardExpanded ? null : res.questionId)}
-                    aria-label={isCardExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
-                    className="min-w-[36px] min-h-[36px] flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                    title={isCardExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
-                  >
-                    {isCardExpanded ? (
-                      <ChevronUp className="w-4 h-4" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-
-                {/* Always-visible brief answer snippet */}
-                <div className="mt-2.5 p-3 rounded-lg bg-slate-950/60 border border-slate-800/60 text-xs">
-                  <span className="text-slate-400 font-semibold block mb-0.5">Sua Resposta:</span>
-                  <p className="text-slate-200 italic">{res.userAnswer || '(Em branco)'}</p>
-                </div>
-
-                {/* Expandable detailed correction & expected answer */}
-                {isCardExpanded && (
-                  <div className="mt-3 pt-3 border-t border-slate-800/60 text-xs space-y-2">
-                    <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-900/40">
-                      <span className="text-emerald-400 font-semibold block mb-0.5">Resposta Esperada Oficial:</span>
-                      <p className="text-slate-100">{res.expectedAnswer}</p>
-                    </div>
-
-                    <div className="text-slate-300 italic pt-1">
-                      <strong>Feedback:</strong> {res.feedback}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  // 2. QUIZ INTERACTIVE QUESTIONNAIRE VIEW
-  if (quizSession) {
-    return (
-      <div className="w-full space-y-6 bg-slate-900/60 border border-slate-800 rounded-xl p-5 md:p-7 shadow-xl backdrop-blur-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="p-1 rounded-md bg-indigo-950/80 border border-indigo-800 text-indigo-400">
-                <HelpCircle className="w-4 h-4" />
-              </span>
-              <h3 className="text-lg font-bold text-slate-100">{quizSession.title}</h3>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Responda de memória para testar retenção ativa &bull; As respostas corretas serão reveladas na submissão
-            </p>
-          </div>
-
-          <button
-            onClick={() => setQuizSession(null)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
-          >
-            <span>Voltar ao Resumo</span>
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmitQuiz} className="space-y-5">
-          {quizSession.questions.map((q, idx) => (
-            <div
-              key={q.id}
-              className="bg-slate-900/60 border border-slate-800 rounded-xl p-4.5 space-y-2.5 shadow-sm"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-950/80 text-indigo-300 border border-indigo-800/60">
-                    Seção {q.sectionIndex}
-                  </span>
-                  <h4 className="text-xs font-semibold text-slate-300">
-                    Questão {idx + 1} de {quizSession.questions.length}
-                  </h4>
-                </div>
-
-                {q.clozeHint && (
-                  <span className="text-[11px] text-slate-400 italic">
-                    Dica: {q.clozeHint}
-                  </span>
-                )}
-              </div>
-
-              <label htmlFor={q.id} className="text-xs sm:text-sm font-semibold text-slate-100 block">
-                {q.question}
-              </label>
-
-              <textarea
-                id={q.id}
-                rows={2}
-                value={quizAnswers[q.id] || ''}
-                onChange={(e) => setQuizAnswers({ ...quizAnswers, [q.id]: e.target.value })}
-                placeholder="Digite sua resposta de memória aqui..."
-                disabled={isSubmittingQuiz}
-                className="w-full bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none"
-              />
-            </div>
-          ))}
-
-          {errorMessage && (
-            <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          <div className="pt-2 flex items-center justify-between">
-            <span className="text-xs text-slate-400">
-              {Object.keys(quizAnswers).filter((k) => (quizAnswers[k] || '').trim().length > 0).length} de{' '}
-              {quizSession.questions.length} respondidas
-            </span>
-
-            <button
-              type="submit"
-              disabled={isSubmittingQuiz}
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
-            >
-              {isSubmittingQuiz ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Avaliando...</span>
-                </>
-              ) : (
-                <>
-                  <span>Submeter Respostas e Ver Correção</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-    );
-  }
-
   // 3. PROGRESSIVE INGESTION & TEXTBOOK READING VIEW
   if (activeJob) {
     const isCompleted = activeJob.status === 'completed';
@@ -790,6 +521,261 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
             </div>
           )}
         </div>
+        {/* Unified Interactive Section (Quiz / Evaluation) on the SAME screen */}
+        {quizEvaluation ? (
+          <div className="pt-6 border-t border-slate-800 space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded-md bg-emerald-950/80 border border-emerald-800 text-emerald-400">
+                  <Trophy className="w-4 h-4" />
+                </span>
+                <h3 className="text-base font-bold text-slate-100">Resultado do Simulado</h3>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuizSession(null);
+                    setQuizEvaluation(null);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  <span>Fechar Simulado</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleGenerateQuiz(10)}
+                  disabled={isGeneratingQuiz}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Novo Simulado</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Score Banner */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-center">
+                <span className="text-xs text-slate-400 block mb-1">Acertos</span>
+                <span className="text-2xl font-extrabold text-emerald-400">
+                  {quizEvaluation.score} / {quizEvaluation.totalQuestions}
+                </span>
+              </div>
+              <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-center">
+                <span className="text-xs text-slate-400 block mb-1">Aproveitamento</span>
+                <span className="text-2xl font-extrabold text-indigo-400">
+                  {quizEvaluation.percentage}%
+                </span>
+              </div>
+              <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-center">
+                <span className="text-xs text-slate-400 block mb-1">Diagnóstico</span>
+                <span className="text-sm font-semibold text-slate-200">
+                  {quizEvaluation.percentage >= 70 ? 'Domínio Sólido' : 'Requer Reforço'}
+                </span>
+              </div>
+            </div>
+
+            {/* Weak Sections Reinforcement Action */}
+            {quizEvaluation.weakSections.length > 0 && (
+              <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-900/60 space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-bold text-amber-300 uppercase tracking-wide block">
+                      Pontos Fracos Identificados
+                    </span>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      Você teve divergências na Seção {quizEvaluation.weakSections.join(', ')}. Deseja fixar o conceito com novas questões sob outra ótica?
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleReinforceSection(quizEvaluation.weakSections[0])}
+                    disabled={isGeneratingQuiz}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 shadow transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                  >
+                    <BrainCircuit className="w-4 h-4" />
+                    <span>Reforçar Seção {quizEvaluation.weakSections[0]} (+5 Questões)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Detailed Correction */}
+            <div className="space-y-3 pt-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Correção Detalhada Questão por Questão
+              </h4>
+
+              {quizEvaluation.results.map((res, idx) => {
+                const isCardExpanded = expandedQuizCardId === res.questionId;
+                return (
+                  <div
+                    key={res.questionId}
+                    className={`bg-slate-900/60 border rounded-xl p-4.5 transition-all shadow-sm ${
+                      res.isCorrect ? 'border-emerald-900/50 hover:border-emerald-800' : 'border-rose-900/50 hover:border-rose-800'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2 mb-1.5">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              res.isCorrect
+                                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60'
+                                : 'bg-rose-950/80 text-rose-300 border border-rose-800/60'
+                            }`}
+                          >
+                            {res.isCorrect ? 'Acerto' : 'Revisar'}
+                          </span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800 font-mono">
+                            Seção {res.sectionIndex}
+                          </span>
+                          <h4 className="text-sm font-semibold text-slate-100">
+                            Questão {idx + 1}
+                          </h4>
+                        </div>
+
+                        <p className="text-xs sm:text-sm font-medium text-slate-200 mt-1">
+                          {res.question}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setExpandedQuizCardId(isCardExpanded ? null : res.questionId)}
+                        aria-label={isCardExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
+                        className="min-w-[36px] min-h-[36px] flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                        title={isCardExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
+                      >
+                        {isCardExpanded ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="mt-2.5 p-3 rounded-lg bg-slate-950/60 border border-slate-800/60 text-xs">
+                      <span className="text-slate-400 font-semibold block mb-0.5">Sua Resposta:</span>
+                      <p className="text-slate-200 italic">{res.userAnswer || '(Em branco)'}</p>
+                    </div>
+
+                    {isCardExpanded && (
+                      <div className="mt-3 pt-3 border-t border-slate-800/60 text-xs space-y-2">
+                        <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-900/40">
+                          <span className="text-emerald-400 font-semibold block mb-0.5">Resposta Esperada Oficial:</span>
+                          <p className="text-slate-100">{res.expectedAnswer}</p>
+                        </div>
+                        <div className="text-slate-300 italic pt-1">
+                          <strong>Feedback:</strong> {res.feedback}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : quizSession ? (
+          <div className="pt-6 border-t border-slate-800 space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-1 rounded-md bg-indigo-950/80 border border-indigo-800 text-indigo-400">
+                    <HelpCircle className="w-4 h-4" />
+                  </span>
+                  <h3 className="text-base font-bold text-slate-100">{quizSession.title}</h3>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Responda de memória para testar retenção ativa &bull; As respostas corretas serão reveladas na submissão
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setQuizSession(null)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                <span>Fechar Simulado</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitQuiz} className="space-y-4">
+              {quizSession.questions.map((q, idx) => (
+                <div
+                  key={q.id}
+                  className="bg-slate-900/60 border border-slate-800 rounded-xl p-4.5 space-y-2.5 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-950/80 text-indigo-300 border border-indigo-800/60">
+                        Seção {q.sectionIndex}
+                      </span>
+                      <h4 className="text-xs font-semibold text-slate-300">
+                        Questão {idx + 1} de {quizSession.questions.length}
+                      </h4>
+                    </div>
+
+                    {q.clozeHint && (
+                      <span className="text-[11px] text-slate-400 italic">
+                        Dica: {q.clozeHint}
+                      </span>
+                    )}
+                  </div>
+
+                  <label htmlFor={q.id} className="text-xs sm:text-sm font-semibold text-slate-100 block">
+                    {q.question}
+                  </label>
+
+                  <textarea
+                    id={q.id}
+                    rows={2}
+                    value={quizAnswers[q.id] || ''}
+                    onChange={(e) => setQuizAnswers({ ...quizAnswers, [q.id]: e.target.value })}
+                    placeholder="Digite sua resposta de memória aqui..."
+                    disabled={isSubmittingQuiz}
+                    className="w-full bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none"
+                  />
+                </div>
+              ))}
+
+              {errorMessage && (
+                <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-between">
+                <span className="text-xs text-slate-400">
+                  {Object.keys(quizAnswers).filter((k) => (quizAnswers[k] || '').trim().length > 0).length} de{' '}
+                  {quizSession.questions.length} respondidas
+                </span>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingQuiz}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
+                >
+                  {isSubmittingQuiz ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Avaliando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Submeter Respostas e Ver Correção</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : null}
       </div>
     );
   }
