@@ -31,17 +31,12 @@ export default function Home() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-2.5 sm:py-0 sm:h-16 flex flex-col sm:flex-row items-center sm:justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center justify-between w-full sm:w-auto">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+              <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
                 <GraduationCap className="w-5 h-5" />
               </div>
-              <div>
-                <h1 className="text-sm sm:text-base font-bold text-slate-100 leading-tight">
-                  Learning Companion
-                </h1>
-                <p className="text-[10px] sm:text-[11px] text-slate-400 hidden sm:block">
-                  Markdown Wiki &bull; Local Embeddings
-                </p>
-              </div>
+              <h1 className="text-sm sm:text-base font-bold text-slate-100 tracking-tight">
+                Learning Companion
+              </h1>
             </div>
           </div>
 
@@ -155,12 +150,6 @@ export default function Home() {
         )}
       </main>
 
-      {/* Subtle Footer */}
-      <footer className="border-t border-slate-900 py-4 text-xs text-slate-500">
-        <div className="max-w-4xl mx-auto px-4 flex items-center justify-between">
-          <span>Learning Companion</span>
-        </div>
-      </footer>
     </div>
   );
 }
