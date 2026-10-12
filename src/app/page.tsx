@@ -130,17 +130,25 @@ export default function Home() {
             )}
           </div>
         ) : activeTab === 'review' ? (
-          <div className="space-y-4">
-            <div className="mb-2">
-              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-                <Flame className="w-5 h-5 text-amber-400" />
-                Aquecimento do Dia &bull; Repetição Espaçada
+          <div className="flex-1 flex flex-col w-full max-w-3xl mx-auto pt-[10vh] sm:pt-[13vh]">
+            {/* Title and Hero Section matching Pre-Flight descent */}
+            <div className="text-center space-y-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-950/80 text-amber-300 border border-amber-800/60 shadow-sm">
+                <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Aquecimento do Dia &bull; Repetição Espaçada</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight">
+                Consolidação Ativa de Memória
               </h2>
-              <p className="text-sm text-slate-400 mt-1">
-                Revisão ativa das frases que seu cérebro está prestes a esquecer. Avalie sua facilidade de recall para otimizar os intervalos do SM-2.
+              <p className="text-sm text-slate-400 max-w-xl mx-auto leading-relaxed">
+                Revise as frases que seu cérebro está prestes a esquecer. Avalie a facilidade de recall para otimizar os intervalos de repetição do algoritmo SM-2.
               </p>
             </div>
-            <DailyReview onComplete={() => setActiveTab('english')} />
+
+            {/* DailyReview Card */}
+            <div className="w-full mt-8 sm:mt-10 pb-6">
+              <DailyReview onComplete={() => setActiveTab('english')} />
+            </div>
           </div>
         ) : (
           <StudyRecords />
