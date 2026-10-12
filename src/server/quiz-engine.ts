@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { getDb } from './db';
 import { callLlmJson } from './llm';
 import { isExactMatch } from '../lib/text-matcher';
+import { extractQuizContextSkeleton } from './quiz-context';
 
 export interface QuizQuestion {
   id: string;
@@ -73,9 +74,30 @@ export async function generateQuizFromStudyEntry(
   questionCount = 10
 ): Promise<QuizSession> {
   const db = getDb();
-  const entry = db
+  let entry = db
     .prepare('SELECT id, title, explanation, tags FROM entries WHERE id = ?')
     .get(studyEntryId) as { id: string; title: string; explanation: string; tags: string } | undefined;
+
+  // Fallback 1: Lookup via slug if client passed a slug
+  if (!entry) {
+    entry = db
+      .prepare('SELECT id, title, explanation, tags FROM entries WHERE slug = ?')
+      .get(studyEntryId) as { id: string; title: string; explanation: string; tags: string } | undefined;
+  }
+
+  // Fallback 2: Lookup via ingest_jobs if client passed jobId
+  if (!entry) {
+    const jobRow = db
+      .prepare('SELECT entry_id FROM ingest_jobs WHERE id = ?')
+      .get(studyEntryId) as { entry_id: string | null } | undefined;
+
+    if (jobRow?.entry_id) {
+      entry = db
+        .prepare('SELECT id, title, explanation, tags FROM entries WHERE id = ?')
+        .get(jobRow.entry_id) as { id: string; title: string; explanation: string; tags: string } | undefined;
+    }
+  }
+
 
   if (!entry) {
     throw new Error(`Study entry "${studyEntryId}" not found.`);
@@ -100,15 +122,17 @@ Output ONLY pure JSON strictly matching this schema:
   ]
 }`;
 
-  const generated = await callLlmJson({
-    messages: [
-      { role: 'system', content: prompt },
-      { role: 'user', content: entry.explanation },
-    ],
-    schema: quizGenerationSchema,
-    temperature: 0.2,
-    maxTokens: 2500,
-  });
+    const condensedContext = extractQuizContextSkeleton(entry.explanation);
+
+    const generated = await callLlmJson({
+      messages: [
+        { role: 'system', content: prompt },
+        { role: 'user', content: condensedContext },
+      ],
+      schema: quizGenerationSchema,
+      temperature: 0.2,
+      maxTokens: 2000,
+    });
 
   const parsedTags: string[] = JSON.parse(entry.tags || '[]');
   const topic = parsedTags[0] || 'Geral';

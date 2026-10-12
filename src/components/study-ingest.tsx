@@ -17,10 +17,12 @@ import {
   Trophy,
   HelpCircle,
   RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
+import { MarkdownView } from './markdown-view';
 import type { IngestJob, CompletedSectionData } from '@/server/ingest-job-manager';
 import type { QuizSession, QuizEvaluationResult } from '@/server/quiz-engine';
-
 interface StudyIngestProps {
   onNavigateToRecords?: () => void;
 }
@@ -43,6 +45,11 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
   // Resume: discover in-flight or recent jobs on mount for continuity
   const [recentJobs, setRecentJobs] = useState<Array<{ id: string; title: string; status: string; totalSections: number }>>([]);
 
+  // Accordion state: global collapse + per-section collapse
+  const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false);
+  const [collapsedSectionIndices, setCollapsedSectionIndices] = useState<Record<number, boolean>>({});
+  // Expanded states for quiz question cards
+  const [expandedQuizCardId, setExpandedQuizCardId] = useState<string | null>(null);
   useEffect(() => {
     const timer = setInterval(async () => {
       try {
@@ -208,7 +215,8 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
 
     setIsGeneratingQuiz(true);
     setErrorMessage(null);
-
+    // Auto-collapse summary to give clear visual focus to the quiz
+    setIsSummaryCollapsed(true);
     try {
       const studyEntryId = activeJob.entryId || activeJob.id;
       const res = await fetch('/api/study/quiz/generate', {
@@ -234,6 +242,12 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
     } finally {
       setIsGeneratingQuiz(false);
     }
+  }
+  function toggleSectionCollapse(index: number) {
+    setCollapsedSectionIndices((prev) => ({
+      ...prev,
+      [index]: !prev[index],
+    }));
   }
 
   async function handleSubmitQuiz(e: React.FormEvent) {
@@ -406,43 +420,77 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
             Correção Detalhada Questão por Questão
           </h4>
 
-          {quizEvaluation.results.map((res, idx) => (
-            <div
-              key={res.questionId}
-              className={`p-4 rounded-lg border text-xs space-y-2 ${
-                res.isCorrect
-                  ? 'bg-emerald-950/20 border-emerald-900/40 text-slate-200'
-                  : 'bg-rose-950/20 border-rose-900/40 text-slate-200'
-              }`}
-            >
-              <div className="flex items-center justify-between font-semibold">
-                <span className="text-sm">
-                  {idx + 1}. {res.question}
-                </span>
-                <span
-                  className={`px-2 py-0.5 rounded text-[11px] ${
-                    res.isCorrect ? 'bg-emerald-900/60 text-emerald-300' : 'bg-rose-900/60 text-rose-300'
-                  }`}
-                >
-                  {res.isCorrect ? 'Correto' : 'Divergente'}
-                </span>
-              </div>
+          {quizEvaluation.results.map((res, idx) => {
+            const isCardExpanded = expandedQuizCardId === res.questionId;
+            return (
+              <div
+                key={res.questionId}
+                className={`bg-slate-900/60 border rounded-xl p-4.5 transition-all shadow-sm ${
+                  res.isCorrect ? 'border-emerald-900/50 hover:border-emerald-800' : 'border-rose-900/50 hover:border-rose-800'
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2 mb-1.5">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                          res.isCorrect
+                            ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60'
+                            : 'bg-rose-950/80 text-rose-300 border border-rose-800/60'
+                        }`}
+                      >
+                        {res.isCorrect ? 'Acerto' : 'Revisar'}
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800 font-mono">
+                        Seção {res.sectionIndex}
+                      </span>
+                      <h4 className="text-sm font-semibold text-slate-100">
+                        Questão {idx + 1}
+                      </h4>
+                    </div>
 
-              <div>
-                <span className="text-slate-400 block">Sua Resposta:</span>
-                <p className="italic text-slate-300">{res.userAnswer || '(Em branco)'}</p>
-              </div>
+                    <p className="text-xs sm:text-sm font-medium text-slate-200 mt-1">
+                      {res.question}
+                    </p>
+                  </div>
 
-              <div>
-                <span className="text-slate-400 block">Resposta Esperada:</span>
-                <p className="font-medium text-slate-100">{res.expectedAnswer}</p>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedQuizCardId(isCardExpanded ? null : res.questionId)}
+                    aria-label={isCardExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
+                    className="min-w-[36px] min-h-[36px] flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                    title={isCardExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
+                  >
+                    {isCardExpanded ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
 
-              <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-800/60">
-                {res.feedback}
-              </p>
-            </div>
-          ))}
+                {/* Always-visible brief answer snippet */}
+                <div className="mt-2.5 p-3 rounded-lg bg-slate-950/60 border border-slate-800/60 text-xs">
+                  <span className="text-slate-400 font-semibold block mb-0.5">Sua Resposta:</span>
+                  <p className="text-slate-200 italic">{res.userAnswer || '(Em branco)'}</p>
+                </div>
+
+                {/* Expandable detailed correction & expected answer */}
+                {isCardExpanded && (
+                  <div className="mt-3 pt-3 border-t border-slate-800/60 text-xs space-y-2">
+                    <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-900/40">
+                      <span className="text-emerald-400 font-semibold block mb-0.5">Resposta Esperada Oficial:</span>
+                      <p className="text-slate-100">{res.expectedAnswer}</p>
+                    </div>
+
+                    <div className="text-slate-300 italic pt-1">
+                      <strong>Feedback:</strong> {res.feedback}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -475,17 +523,28 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
 
         <form onSubmit={handleSubmitQuiz} className="space-y-5">
           {quizSession.questions.map((q, idx) => (
-            <div key={q.id} className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+            <div
+              key={q.id}
+              className="bg-slate-900/60 border border-slate-800 rounded-xl p-4.5 space-y-2.5 shadow-sm"
+            >
               <div className="flex items-center justify-between">
-                <span className="text-xs px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-semibold">
-                  Questão {idx + 1} de {quizSession.questions.length} (Seção {q.sectionIndex})
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-950/80 text-indigo-300 border border-indigo-800/60">
+                    Seção {q.sectionIndex}
+                  </span>
+                  <h4 className="text-xs font-semibold text-slate-300">
+                    Questão {idx + 1} de {quizSession.questions.length}
+                  </h4>
+                </div>
+
                 {q.clozeHint && (
-                  <span className="text-[11px] text-slate-400 italic">Dica: {q.clozeHint}</span>
+                  <span className="text-[11px] text-slate-400 italic">
+                    Dica: {q.clozeHint}
+                  </span>
                 )}
               </div>
 
-              <label htmlFor={q.id} className="text-sm font-medium text-slate-100 block">
+              <label htmlFor={q.id} className="text-xs sm:text-sm font-semibold text-slate-100 block">
                 {q.question}
               </label>
 
@@ -496,7 +555,7 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
                 onChange={(e) => setQuizAnswers({ ...quizAnswers, [q.id]: e.target.value })}
                 placeholder="Digite sua resposta de memória aqui..."
                 disabled={isSubmittingQuiz}
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none"
+                className="w-full bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none"
               />
             </div>
           ))}
@@ -593,25 +652,44 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
               </button>
             )}
             {isCompleted && (
-              <button
-                onClick={() => handleGenerateQuiz(10)}
-                disabled={isGeneratingQuiz}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {isGeneratingQuiz ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Gerando Simulado...</span>
-                  </>
-                ) : (
-                  <>
-                    <BrainCircuit className="w-3.5 h-3.5" />
-                    <span>Iniciar Simulado (10 Questões)</span>
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setIsSummaryCollapsed(!isSummaryCollapsed)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                  title={isSummaryCollapsed ? 'Expandir resumo completo' : 'Recolher resumo para focar nas questões'}
+                >
+                  {isSummaryCollapsed ? (
+                    <>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                      <span>Expandir Resumo</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronUp className="w-3.5 h-3.5" />
+                      <span>Recolher Resumo</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => handleGenerateQuiz(10)}
+                  disabled={isGeneratingQuiz}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isGeneratingQuiz ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Gerando Simulado...</span>
+                    </>
+                  ) : (
+                    <>
+                      <BrainCircuit className="w-3.5 h-3.5" />
+                      <span>Iniciar Simulado (10 Questões)</span>
+                    </>
+                  )}
+                </button>
+              </div>
             )}
-          </div>
         </div>
 
         {/* Progress Stepper Bar */}
@@ -633,37 +711,72 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
         )}
 
         {/* Progressive Section Reading Stream */}
-        <div className="space-y-5">
-          {activeJob.completedSections.map((sec) => (
-            <article
-              key={sec.sectionIndex}
-              className="p-5 md:p-6 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 shadow-sm"
+        {!isSummaryCollapsed ? (
+          <div className="space-y-5">
+            {activeJob.completedSections.map((sec) => {
+              const isSectionCollapsed = !!collapsedSectionIndices[sec.sectionIndex];
+              return (
+                <article
+                  key={sec.sectionIndex}
+                  className="p-5 md:p-6 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 shadow-sm transition-all"
+                >
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-xs font-semibold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                        Seção {sec.sectionIndex}
+                      </span>
+                      <h4 className="text-base font-bold text-slate-100">{sec.sectionTitle}</h4>
+                    </div>
+
+                    <button
+                      onClick={() => toggleSectionCollapse(sec.sectionIndex)}
+                      className="p-1 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                      title={isSectionCollapsed ? 'Expandir seção' : 'Recolher seção'}
+                      aria-label={isSectionCollapsed ? 'Expandir seção' : 'Recolher seção'}
+                    >
+                      {isSectionCollapsed ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronUp className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+
+                  {!isSectionCollapsed && (
+                    <>
+                      {sec.keyPoints && sec.keyPoints.length > 0 && (
+                        <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800/60">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+                            Pontos Nucleares:
+                          </span>
+                          <ul className="text-xs text-slate-300 space-y-1 pl-4 list-disc marker:text-indigo-400">
+                            {sec.keyPoints.map((kp, kIdx) => (
+                              <li key={kIdx}>{kp}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <MarkdownView content={sec.markdown} />
+                    </>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800 text-center flex items-center justify-between">
+            <span className="text-xs text-slate-400">
+              Resumo recolhido para leitura focada. Clique para expandir a qualquer momento.
+            </span>
+            <button
+              onClick={() => setIsSummaryCollapsed(false)}
+              className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 cursor-pointer"
             >
-              <div className="flex items-center gap-2 pb-2 border-b border-slate-800/80">
-                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-indigo-950 text-indigo-300 border border-indigo-800">
-                  Seção {sec.sectionIndex}
-                </span>
-                <h4 className="text-base font-bold text-slate-100">{sec.sectionTitle}</h4>
-              </div>
-
-              {sec.keyPoints && sec.keyPoints.length > 0 && (
-                <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800/60">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
-                    Pontos Nucleares:
-                  </span>
-                  <ul className="text-xs text-slate-300 space-y-1 pl-4 list-disc marker:text-indigo-400">
-                    {sec.keyPoints.map((kp, kIdx) => (
-                      <li key={kIdx}>{kp}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="text-sm text-slate-200 leading-relaxed whitespace-pre-line">
-                {sec.markdown}
-              </div>
-            </article>
-          ))}
+              Expandir Resumo
+            </button>
+          </div>
+        )}
 
           {!isCompleted && !isFailed && (
             <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center space-y-2">
