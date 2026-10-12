@@ -85,30 +85,30 @@ export function StudyRecords() {
           <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 self-start sm:self-auto">
             <button
               onClick={() => setActiveModule('all')}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 min-h-[36px] flex items-center rounded text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                 activeModule === 'all'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
               }`}
             >
               Todos
             </button>
             <button
               onClick={() => setActiveModule('english')}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 min-h-[36px] flex items-center rounded text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                 activeModule === 'english'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
               }`}
             >
               Inglês
             </button>
             <button
               onClick={() => setActiveModule('studies')}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 min-h-[36px] flex items-center rounded text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                 activeModule === 'studies'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
               }`}
             >
               Faculdade/Estudos
@@ -192,7 +192,8 @@ export function StudyRecords() {
                   {entry.target_en && (
                     <button
                       onClick={() => handleCopy(entry.target_en, entry.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-slate-800/60 transition-colors cursor-pointer"
+                      aria-label="Copiar frase em inglês"
+                      className="min-w-[36px] min-h-[36px] flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-slate-800/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                       title="Copiar frase em inglês"
                     >
                       {copiedId === entry.id ? (
@@ -204,7 +205,8 @@ export function StudyRecords() {
                   )}
                   <button
                     onClick={() => setExpandedId(isExpanded ? null : entry.id)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer"
+                    aria-label={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
+                    className="min-w-[36px] min-h-[36px] flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                     title={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
                   >
                     {isExpanded ? (
