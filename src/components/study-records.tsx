@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Search,
   BookOpen,
@@ -12,7 +12,11 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  Folder,
+  FolderOpen,
+  Layers,
 } from 'lucide-react';
+import { MarkdownView } from './markdown-view';
 import type { StoredEntry } from '@/server/wiki-store';
 
 export function StudyRecords() {
@@ -22,6 +26,7 @@ export function StudyRecords() {
   const [activeModule, setActiveModule] = useState<'all' | 'english' | 'studies'>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedConcepts, setExpandedConcepts] = useState<Record<string, boolean>>({});
 
   const fetchEntries = useCallback(async (searchQuery: string) => {
     setIsLoading(true);
@@ -48,10 +53,36 @@ export function StudyRecords() {
     return () => clearTimeout(timer);
   }, [query, fetchEntries]);
 
-  const filteredEntries = entries.filter((e) => {
-    if (activeModule === 'all') return true;
-    return e.module === activeModule;
-  });
+  const filteredEntries = useMemo(() => {
+    return entries.filter((e) => {
+      if (activeModule === 'all') return true;
+      return e.module === activeModule;
+    });
+  }, [entries, activeModule]);
+
+  // Group English entries into clusters by concept / primary tag
+  const englishClusters = useMemo(() => {
+    const englishItems = filteredEntries.filter((e) => e.module === 'english');
+    const map: Record<string, StoredEntry[]> = {};
+
+    for (const item of englishItems) {
+      const concept = item.tags && item.tags.length > 0 ? item.tags[0].toLowerCase() : 'geral';
+      if (!map[concept]) {
+        map[concept] = [];
+      }
+      map[concept].push(item);
+    }
+
+    return Object.entries(map).map(([concept, items]) => ({
+      concept,
+      entries: items,
+    }));
+  }, [filteredEntries]);
+
+  // Group Study entries (Chapters / Materials)
+  const studyDocuments = useMemo(() => {
+    return filteredEntries.filter((e) => e.module === 'studies');
+  }, [filteredEntries]);
 
   async function handleCopy(text?: string, id?: string) {
     if (!text) return;
@@ -62,9 +93,19 @@ export function StudyRecords() {
         setTimeout(() => setCopiedId(null), 2500);
       }
     } catch (e) {
-      console.error('Failed to copy to clipboard:', e);
+      console.error('Failed to copy text:', e);
     }
   }
+
+  function toggleConceptFolder(concept: string) {
+    setExpandedConcepts((prev) => ({
+      ...prev,
+      [concept]: !prev[concept],
+    }));
+  }
+
+  const showStudies = activeModule === 'all' || activeModule === 'studies';
+  const showEnglish = activeModule === 'all' || activeModule === 'english';
 
   return (
     <div className="w-full space-y-6">
@@ -74,7 +115,7 @@ export function StudyRecords() {
           <div>
             <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-indigo-400" />
-              Base de Conhecimento &amp; Histórico (.md)
+              Caderno de Estudos &amp; Conhecimento
             </h2>
           </div>
 
@@ -98,7 +139,7 @@ export function StudyRecords() {
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
               }`}
             >
-              Inglês
+              Inglês por Conceito
             </button>
             <button
               onClick={() => setActiveModule('studies')}
@@ -108,7 +149,7 @@ export function StudyRecords() {
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
               }`}
             >
-              Faculdade/Estudos
+              Materiais &bull; Resumos
             </button>
           </div>
         </div>
@@ -120,7 +161,7 @@ export function StudyRecords() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Pesquise por conceito, significado ou frase... (ex: 'aprimorar regra', 'docker', 'cancelar reunião')"
+            placeholder="Pesquise por conceito, capítulo ou frase... (ex: 'arquivos', 'prepositions', 'cache')"
             className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-10 pr-10 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
           />
           {isLoading && (
@@ -129,128 +170,213 @@ export function StudyRecords() {
         </div>
       </div>
 
-      {/* Entries List */}
-      <div className="space-y-3">
+      {/* Main Content Area */}
+      <div className="space-y-6">
         {filteredEntries.length === 0 && !isLoading && (
           <div className="text-center py-12 border border-dashed border-slate-800/80 rounded-xl bg-slate-900/30">
             <BookOpen className="w-8 h-8 text-slate-600 mx-auto mb-2" />
             <p className="text-sm text-slate-400">Nenhum registro encontrado.</p>
-            <p className="text-xs text-slate-400 mt-1">
-              Pratique uma nova frase na aba &ldquo;English Pre-Flight&rdquo; para começar seu wiki!
+            <p className="text-xs text-slate-500 mt-1">
+              Pratique uma nova frase no Pre-Flight ou ingira um PDF na aba Estudos!
             </p>
           </div>
         )}
 
-        {filteredEntries.map((entry) => {
-          const isExpanded = expandedId === entry.id;
-          const formattedDate = new Date(entry.created_at).toLocaleDateString('pt-BR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-          });
+        {/* 1. SEÇÃO DE ESTUDOS / CAPÍTULOS (com resumos e questões juntas) */}
+        {showStudies && studyDocuments.length > 0 && (
+          <div className="space-y-3">
+            {activeModule === 'all' && (
+              <div className="flex items-center gap-2 pb-1 border-b border-slate-800/80">
+                <Layers className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  Capítulos e Materiais de Estudo ({studyDocuments.length})
+                </h3>
+              </div>
+            )}
 
-          return (
-            <div
-              key={entry.id}
-              className="bg-slate-900/60 border border-slate-800 rounded-xl p-4.5 hover:border-slate-700/80 transition-all shadow-sm"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                        entry.module === 'english'
-                          ? 'bg-indigo-950/80 text-indigo-300 border border-indigo-800/60'
-                          : 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60'
-                      }`}
-                    >
-                      {entry.module}
-                    </span>
-                    <h3 className="text-sm font-semibold text-slate-100">
-                      {entry.title}
-                    </h3>
-                  </div>
+            {studyDocuments.map((entry) => {
+              const isExpanded = expandedId === entry.id;
+              const formattedDate = new Date(entry.created_at).toLocaleDateString('pt-BR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+              });
 
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-slate-400" />
-                      {formattedDate}
-                    </span>
-                    {entry.similarity !== undefined && entry.similarity > 0 && (
-                      <span className="inline-flex items-center gap-0.5 text-indigo-400 font-mono text-[11px] bg-indigo-950/60 px-1.5 py-0.2 rounded border border-indigo-800/40">
-                        <Sparkles className="w-2.5 h-2.5" />
-                        {Math.round(entry.similarity * 100)}% relevância
-                      </span>
-                    )}
-                  </div>
-                </div>
+              return (
+                <div
+                  key={entry.id}
+                  className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 hover:border-slate-700/80 transition-all shadow-sm space-y-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-950/80 text-emerald-300 border border-emerald-800/60">
+                          Estudos
+                        </span>
+                        <h3 className="text-base font-bold text-slate-100">{entry.title}</h3>
+                      </div>
 
-                <div className="flex items-center gap-2">
-                  {entry.target_en && (
+                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          {formattedDate}
+                        </span>
+                        {entry.similarity !== undefined && entry.similarity > 0 && (
+                          <span className="inline-flex items-center gap-0.5 text-indigo-400 font-mono text-[11px] bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-800/40">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            {Math.round(entry.similarity * 100)}% relevância
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
                     <button
-                      onClick={() => handleCopy(entry.target_en, entry.id)}
-                      aria-label="Copiar frase em inglês"
-                      className="min-w-[36px] min-h-[36px] flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-slate-800/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                      title="Copiar frase em inglês"
+                      onClick={() => setExpandedId(isExpanded ? null : entry.id)}
+                      aria-label={isExpanded ? 'Recolher material' : 'Expandir material'}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
                     >
-                      {copiedId === entry.id ? (
-                        <Check className="w-4 h-4 text-emerald-400" />
+                      {isExpanded ? (
+                        <>
+                          <ChevronUp className="w-3.5 h-3.5" />
+                          <span>Recolher Material</span>
+                        </>
                       ) : (
-                        <Copy className="w-4 h-4" />
+                        <>
+                          <ChevronDown className="w-3.5 h-3.5" />
+                          <span>Ler Resumo e Questões</span>
+                        </>
                       )}
                     </button>
+                  </div>
+
+                  {/* Tags */}
+                  {entry.tags && entry.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {entry.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-slate-950 text-slate-400 border border-slate-800/80"
+                        >
+                          <Tag className="w-2.5 h-2.5 text-slate-400" />
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   )}
-                  <button
-                    onClick={() => setExpandedId(isExpanded ? null : entry.id)}
-                    aria-label={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
-                    className="min-w-[36px] min-h-[36px] flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                    title={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
-                  >
-                    {isExpanded ? (
-                      <ChevronUp className="w-4 h-4" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4" />
-                    )}
-                  </button>
+
+                  {/* Expanded Markdown View (Summary + Embedded Questions together) */}
+                  {isExpanded && entry.explanation && (
+                    <div className="pt-3 border-t border-slate-800/80">
+                      <MarkdownView content={entry.explanation} />
+                    </div>
+                  )}
                 </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* 2. SEÇÃO DE INGLÊS AGRUPADA POR CONCEITO */}
+        {showEnglish && englishClusters.length > 0 && (
+          <div className="space-y-3">
+            {activeModule === 'all' && (
+              <div className="flex items-center gap-2 pb-1 border-b border-slate-800/80 pt-2">
+                <Sparkles className="w-4 h-4 text-indigo-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  Práticas de Inglês por Conceito ({englishClusters.length} grupos)
+                </h3>
               </div>
+            )}
 
-              {/* Main content snippet */}
-              {entry.target_en && (
-                <div className="mt-2.5 p-3 rounded-lg bg-slate-950/60 border border-slate-800/60 text-sm font-medium text-slate-200">
-                  <p>&ldquo;{entry.target_en}&rdquo;</p>
-                  {entry.input_pt && (
-                    <p className="text-xs text-slate-400 mt-1 italic">
-                      Original: {entry.input_pt}
-                    </p>
+            {englishClusters.map((cluster) => {
+              const isClusterOpen = !!expandedConcepts[cluster.concept];
+
+              return (
+                <div
+                  key={cluster.concept}
+                  className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden shadow-sm"
+                >
+                  {/* Concept Cluster Folder Header */}
+                  <div
+                    onClick={() => toggleConceptFolder(cluster.concept)}
+                    className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-800/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="p-1 rounded-md bg-indigo-950/80 border border-indigo-800/60 text-indigo-400">
+                        {isClusterOpen ? <FolderOpen className="w-4 h-4" /> : <Folder className="w-4 h-4" />}
+                      </span>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-200 capitalize">
+                          Conceito: {cluster.concept}
+                        </h4>
+                        <span className="text-xs text-slate-400">
+                          {cluster.entries.length} {cluster.entries.length === 1 ? 'frase praticada' : 'frases praticadas'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      aria-label={isClusterOpen ? 'Recolher conceito' : 'Expandir conceito'}
+                      className="p-1.5 text-slate-400 hover:text-slate-200"
+                    >
+                      {isClusterOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {/* Expanded Cluster Entries */}
+                  {isClusterOpen && (
+                    <div className="border-t border-slate-800/80 p-4 space-y-3 bg-slate-950/40">
+                      {cluster.entries.map((entry) => (
+                        <div
+                          key={entry.id}
+                          className="p-3.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-slate-300">
+                              {entry.title}
+                            </span>
+                            {entry.target_en && (
+                              <button
+                                onClick={() => handleCopy(entry.target_en, entry.id)}
+                                aria-label="Copiar frase em inglês"
+                                className="p-1 rounded text-slate-400 hover:text-indigo-300 cursor-pointer"
+                                title="Copiar frase"
+                              >
+                                {copiedId === entry.id ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+
+                          {entry.target_en && (
+                            <p className="text-xs font-medium text-slate-100">
+                              &ldquo;{entry.target_en}&rdquo;
+                            </p>
+                          )}
+                          {entry.input_pt && (
+                            <p className="text-[11px] text-slate-400 italic">
+                              Original: {entry.input_pt}
+                            </p>
+                          )}
+
+                          {entry.explanation && (
+                            <div className="pt-2 text-[11px] text-slate-300 border-t border-slate-800/60 leading-relaxed whitespace-pre-line">
+                              {entry.explanation}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-              )}
-
-              {/* Tags */}
-              {entry.tags && entry.tags.length > 0 && (
-                <div className="mt-2.5 flex flex-wrap gap-1">
-                  {entry.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-slate-950 text-slate-400 border border-slate-800/80"
-                    >
-                      <Tag className="w-2.5 h-2.5 text-slate-400" />
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Expanded details */}
-              {isExpanded && entry.explanation && (
-                <div className="mt-3 pt-3 border-t border-slate-800/60 text-xs text-slate-300 leading-relaxed whitespace-pre-line">
-                  {entry.explanation}
-                </div>
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

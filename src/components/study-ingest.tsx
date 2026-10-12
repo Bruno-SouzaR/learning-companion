@@ -206,6 +206,14 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
       const json = await res.json();
       if (json.success && json.data) {
         setActiveJob(json.data);
+        if (json.data.latestQuiz) {
+          setQuizSession(json.data.latestQuiz);
+          setIsSummaryCollapsed(true);
+          setIsQuizCollapsed(true); // Ambos contraídos por padrão
+        } else {
+          setQuizSession(null);
+          setQuizEvaluation(null);
+        }
       }
     } catch (err) {
       console.error('Falha ao abrir job:', err);

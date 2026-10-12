@@ -64,8 +64,8 @@ describe('Integration: Document Ingestion Pipeline', () => {
     expect(entryRow).toBeDefined();
     expect(entryRow?.module).toBe('studies');
 
-    // Verify drill registered in srs_items
-    const srsRows = db.prepare('SELECT id, entry_id, module FROM srs_items WHERE entry_id = ?').all(`entry_${result.drills[0].id}`);
+    // Verify document registered in srs_items
+    const srsRows = db.prepare('SELECT id, entry_id, module FROM srs_items WHERE entry_id = ?').all(result.id);
     expect(srsRows.length).toBeGreaterThanOrEqual(1);
   });
 

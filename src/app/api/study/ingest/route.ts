@@ -8,6 +8,8 @@ import {
   listRecentIngestJobs,
   processDocumentInBackground,
 } from '@/server/ingest-job-manager';
+import { getDb } from '@/server/db';
+import type { QuizSession } from '@/server/quiz-engine';
 
 const jsonIngestSchema = z.object({
   title: z.string().trim().min(1, 'O título do documento é obrigatório'),
@@ -141,9 +143,72 @@ export async function GET(request: Request) {
       );
     }
 
+    let latestQuiz: QuizSession | null = null;
+    if (job.entryId) {
+      const db = getDb();
+      const quizRow = db
+        .prepare(`
+          SELECT id, study_entry_id, title, topic, status, total_questions, score, weak_sections, created_at
+          FROM study_quizzes
+          WHERE study_entry_id = ?
+          ORDER BY created_at DESC
+          LIMIT 1
+        `)
+        .get(job.entryId) as
+        | {
+            id: string;
+            study_entry_id: string;
+            title: string;
+            topic: string;
+            status: string;
+            total_questions: number;
+            score: number | null;
+            weak_sections: string;
+            created_at: string;
+          }
+        | undefined;
+
+      if (quizRow) {
+        const questions = db
+          .prepare(`
+            SELECT id, section_index, question, cloze_hint
+            FROM quiz_questions
+            WHERE quiz_id = ?
+            ORDER BY section_index ASC
+          `)
+          .all(quizRow.id) as Array<{
+            id: string;
+            section_index: number;
+            question: string;
+            cloze_hint: string | null;
+          }>;
+
+        latestQuiz = {
+          id: quizRow.id,
+          studyEntryId: quizRow.study_entry_id,
+          title: quizRow.title,
+          topic: quizRow.topic,
+          status: quizRow.status as 'pending' | 'completed',
+          totalQuestions: quizRow.total_questions,
+          score: quizRow.score,
+          weakSections: JSON.parse(quizRow.weak_sections || '[]'),
+          questions: questions.map((q) => ({
+            id: q.id,
+            sectionIndex: q.section_index,
+            question: q.question,
+            clozeHint: q.cloze_hint || undefined,
+          })),
+          createdAt: quizRow.created_at,
+        };
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      data: job,
+      data: {
+        ...job,
+        latestQuiz,
+      },
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Falha ao consultar status da ingestão';

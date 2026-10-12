@@ -215,34 +215,13 @@ ${drillsMarkdown || 'Nenhuma questão gerada.'}
     now.toISOString()
   );
 
-  // Automatically schedule each active recall drill into the SRS queue
+  // Automatically schedule study document into the SRS queue
   let srsScheduledCount = 0;
-  for (const drill of allDrills) {
-    try {
-      const drillEntryId = `entry_${drill.id}`;
-      // Register individual drill entry for granular repetition
-      db.prepare(`
-        INSERT OR REPLACE INTO entries (
-          id, slug, file_path, module, title, input_pt, target_en, explanation, tags, created_at, updated_at
-        ) VALUES (?, ?, ?, 'studies', ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        drillEntryId,
-        slugify(drill.question),
-        filePath,
-        drill.question,
-        drill.question,
-        drill.expectedAnswer,
-        drill.clozeHint || drill.expectedAnswer,
-        JSON.stringify([params.topic.toLowerCase(), 'drill']),
-        now.toISOString(),
-        now.toISOString()
-      );
-
-      scheduleNewEntry(drillEntryId, 'studies', 1);
-      srsScheduledCount++;
-    } catch (err) {
-      console.error('Failed to schedule SRS drill:', drill.id, err);
-    }
+  try {
+    scheduleNewEntry(docId, 'studies', 1);
+    srsScheduledCount = allDrills.length;
+  } catch (err) {
+    console.error('Failed to schedule SRS entry for document:', docId, err);
   }
 
   return {
