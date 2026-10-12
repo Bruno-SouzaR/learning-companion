@@ -50,6 +50,8 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
   const [collapsedSectionIndices, setCollapsedSectionIndices] = useState<Record<number, boolean>>({});
   // Expanded states for quiz question cards
   const [expandedQuizCardId, setExpandedQuizCardId] = useState<string | null>(null);
+  // Quiz collapse state (mirrors summary collapse behavior)
+  const [isQuizCollapsed, setIsQuizCollapsed] = useState(false);
   useEffect(() => {
     const timer = setInterval(async () => {
       try {
@@ -214,9 +216,9 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
     if (!activeJob) return;
 
     setIsGeneratingQuiz(true);
-    setErrorMessage(null);
-    // Auto-collapse summary to give clear visual focus to the quiz
+    // Auto-collapse summary and expand quiz on generation
     setIsSummaryCollapsed(true);
+    setIsQuizCollapsed(false);
     try {
       const studyEntryId = activeJob.entryId || activeJob.id;
       const res = await fetch('/api/study/quiz/generate', {
@@ -535,13 +537,21 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setQuizSession(null);
-                    setQuizEvaluation(null);
-                  }}
+                  onClick={() => setIsQuizCollapsed(!isQuizCollapsed)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                  title={isQuizCollapsed ? 'Expandir resultado' : 'Recolher resultado'}
                 >
-                  <span>Fechar Simulado</span>
+                  {isQuizCollapsed ? (
+                    <>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                      <span>Expandir Resultado</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronUp className="w-3.5 h-3.5" />
+                      <span>Recolher Resultado</span>
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
@@ -554,9 +564,10 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
                 </button>
               </div>
             </div>
-
-            {/* Score Banner */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {!isQuizCollapsed ? (
+              <div className="space-y-6">
+                {/* Score Banner */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-center">
                 <span className="text-xs text-slate-400 block mb-1">Acertos</span>
                 <span className="text-2xl font-extrabold text-emerald-400">
@@ -677,7 +688,23 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
                   </div>
                 );
               })}
-            </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800 text-center flex items-center justify-between">
+                <span className="text-xs text-slate-400">
+                  Resultado do Simulado ({quizEvaluation.score}/{quizEvaluation.totalQuestions} acertos &bull; {quizEvaluation.percentage}%). Clique para ver a correção.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsQuizCollapsed(false)}
+                  className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 cursor-pointer flex items-center gap-1"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  <span>Expandir Resultado</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : quizSession ? (
           <div className="pt-6 border-t border-slate-800 space-y-6">
@@ -696,12 +723,25 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
 
               <button
                 type="button"
-                onClick={() => setQuizSession(null)}
+                onClick={() => setIsQuizCollapsed(!isQuizCollapsed)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                title={isQuizCollapsed ? 'Expandir simulado' : 'Recolher simulado'}
               >
-                <span>Fechar Simulado</span>
+                {isQuizCollapsed ? (
+                  <>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                    <span>Expandir Simulado</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronUp className="w-3.5 h-3.5" />
+                    <span>Recolher Simulado</span>
+                  </>
+                )}
               </button>
             </div>
+
+            {!isQuizCollapsed ? (
 
             <form onSubmit={handleSubmitQuiz} className="space-y-4">
               {quizSession.questions.map((q, idx) => (
@@ -773,7 +813,22 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
                   )}
                 </button>
               </div>
-            </form>
+              </form>
+            ) : (
+              <div className="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800 text-center flex items-center justify-between">
+                <span className="text-xs text-slate-400">
+                  Simulado ativo ({quizSession.questions.length} questões). Clique para continuar respondendo.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsQuizCollapsed(false)}
+                  className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 cursor-pointer flex items-center gap-1"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  <span>Expandir Simulado</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : null}
       </div>
