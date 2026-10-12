@@ -15,6 +15,7 @@ import {
   Check,
 } from 'lucide-react';
 import type { RefineResult } from '@/server/llm';
+import { isExactMatch as checkMatch } from '@/lib/text-matcher';
 
 interface ActiveRecallProps {
   rawInput: string;
@@ -45,11 +46,10 @@ export function ActiveRecall({
   }, [result.target_english, typedInput, isDiffVisible]);
 
   // Check if user's attempt matches target (ignoring trailing whitespace and case)
-  const isExactMatch = useMemo(() => {
-    const cleanTarget = result.target_english.trim().toLowerCase().replace(/[.,!?;:]/g, '');
-    const cleanTyped = typedInput.trim().toLowerCase().replace(/[.,!?;:]/g, '');
-    return cleanTarget.length > 0 && cleanTarget === cleanTyped;
-  }, [result.target_english, typedInput]);
+  const isExactMatch = useMemo(
+    () => checkMatch(result.target_english, typedInput),
+    [result.target_english, typedInput]
+  );
 
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setTypedInput(e.target.value);

@@ -33,7 +33,7 @@ export interface StoredEntry {
 const WIKI_DIR = path.join(process.cwd(), 'data', 'wiki');
 const ENGLISH_DIR = path.join(WIKI_DIR, 'english');
 
-function slugify(text: string): string {
+export function slugify(text: string): string {
   return text
     .toLowerCase()
     .normalize('NFD')
@@ -208,6 +208,17 @@ export async function syncWikiToDb(): Promise<number> {
         console.error(`Failed to sync file ${fullPath}:`, e);
       }
     }
+  }
+  // Clean up stale database records for deleted files
+  try {
+    const allRecords = db.prepare('SELECT id, file_path FROM entries').all() as Array<{ id: string; file_path: string }>;
+    for (const record of allRecords) {
+      if (!fs.existsSync(record.file_path)) {
+        db.prepare('DELETE FROM entries WHERE id = ?').run(record.id);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to cleanup stale entries during sync:', err);
   }
 
   return indexedCount;
