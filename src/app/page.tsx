@@ -1,15 +1,16 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Sparkles, BookOpen, GraduationCap, Flame } from 'lucide-react';
+import { Sparkles, BookOpen, GraduationCap, Flame, FileText } from 'lucide-react';
 import { EnglishPreFlight } from '@/components/english-preflight';
 import { ActiveRecall } from '@/components/active-recall';
 import { StudyRecords } from '@/components/study-records';
 import { DailyReview } from '@/components/daily-review';
+import { StudyIngest } from '@/components/study-ingest';
 import type { RefineResult } from '@/server/llm';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'english' | 'review' | 'records'>('english');
+  const [activeTab, setActiveTab] = useState<'english' | 'ingest' | 'review' | 'records'>('english');
   const [rawInput, setRawInput] = useState<string | null>(null);
   const [refinedResult, setRefinedResult] = useState<RefineResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,11 +44,11 @@ export default function Home() {
           {/* Navigation Tabs */}
           <nav
             aria-label="Navegação Principal"
-            className="flex items-center justify-between w-full sm:w-auto gap-1 bg-slate-900/90 p-1 rounded-lg border border-slate-800"
+            className="flex items-center justify-between w-full sm:w-auto gap-0.5 sm:gap-1 bg-slate-900/90 p-1 rounded-lg border border-slate-800 overflow-x-auto"
           >
             <button
               onClick={() => setActiveTab('english')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 min-h-[38px] sm:min-h-0 rounded-md text-xs font-semibold whitespace-nowrap transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 sm:py-1.5 min-h-[38px] sm:min-h-0 rounded-md text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                 activeTab === 'english'
                   ? 'bg-indigo-600 text-white shadow'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
@@ -57,8 +58,19 @@ export default function Home() {
               <span>Pre-Flight</span>
             </button>
             <button
+              onClick={() => setActiveTab('ingest')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 sm:py-1.5 min-h-[38px] sm:min-h-0 rounded-md text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                activeTab === 'ingest'
+                  ? 'bg-indigo-600 text-white shadow'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5 shrink-0" />
+              <span>Estudos</span>
+            </button>
+            <button
               onClick={() => setActiveTab('review')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 min-h-[38px] sm:min-h-0 rounded-md text-xs font-semibold whitespace-nowrap transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 sm:py-1.5 min-h-[38px] sm:min-h-0 rounded-md text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
                 activeTab === 'review'
                   ? 'bg-amber-600 text-white shadow'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
@@ -72,7 +84,7 @@ export default function Home() {
             </button>
             <button
               onClick={() => setActiveTab('records')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 min-h-[38px] sm:min-h-0 rounded-md text-xs font-semibold whitespace-nowrap transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 sm:py-1.5 min-h-[38px] sm:min-h-0 rounded-md text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                 activeTab === 'records'
                   ? 'bg-indigo-600 text-white shadow'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
@@ -119,6 +131,20 @@ export default function Home() {
                 />
               </div>
             )}
+          </div>
+        ) : activeTab === 'ingest' ? (
+          <div className="flex-1 flex flex-col w-full max-w-3xl mx-auto pt-[4vh] sm:pt-[6vh]">
+            <div className="text-center space-y-2 mb-6">
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight">
+                Ingestão de Materiais &amp; PDFs
+              </h2>
+              <p className="text-sm text-slate-400 max-w-xl mx-auto leading-relaxed">
+                Envie capítulos de livros, PDFs ou notas de aula. O Gemma 4 fatia o documento, sintetiza resumos seccionais e gera questões de Active Recall para o seu SRS.
+              </p>
+            </div>
+            <StudyIngest
+              onNavigateToRecords={() => setActiveTab('records')}
+            />
           </div>
         ) : activeTab === 'review' ? (
           <div className="flex-1 flex flex-col w-full max-w-3xl mx-auto pt-[10vh] sm:pt-[13vh]">
