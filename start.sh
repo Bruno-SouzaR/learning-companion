@@ -7,7 +7,7 @@ if ! curl -s http://127.0.0.1:8080/health > /dev/null 2>&1; then
 fi
 
 echo "=========================================================="
-echo "🧠 Local LLM: Qwen 3.5 2B Q8 on Intel Arc 140V (Vulkan iGPU)"
+echo "🧠 Local LLM: Gemma 4 E4B Q5_K_M (65k Q8 KV) on Intel Arc 140V (Vulkan iGPU)"
 echo "🌐 Web App:   http://localhost:3000"
 echo "=========================================================="
 
