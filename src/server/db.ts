@@ -66,6 +66,23 @@ export function getDb(): DatabaseSync {
 
     CREATE INDEX IF NOT EXISTS idx_sessions_status ON study_sessions(status);
     CREATE INDEX IF NOT EXISTS idx_turns_session_id ON session_turns(session_id);
+
+    CREATE TABLE IF NOT EXISTS srs_items (
+      id TEXT PRIMARY KEY,
+      entry_id TEXT NOT NULL UNIQUE,
+      module TEXT NOT NULL,
+      repetitions INTEGER NOT NULL DEFAULT 0,
+      interval_days INTEGER NOT NULL DEFAULT 1,
+      ease_factor REAL NOT NULL DEFAULT 2.5,
+      next_review_at TEXT NOT NULL,
+      last_reviewed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(entry_id) REFERENCES entries(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_srs_next_review ON srs_items(next_review_at ASC);
+    CREATE INDEX IF NOT EXISTS idx_srs_module ON srs_items(module);
   `);
 
   return dbInstance;

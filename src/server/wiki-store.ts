@@ -3,6 +3,7 @@ import path from 'node:path';
 import matter from 'gray-matter';
 import { getDb } from './db';
 import { generateEmbedding, cosineSimilarity } from './embeddings';
+import { scheduleNewEntry } from './srs-engine';
 
 export interface WikiEntryFrontmatter {
   id: string;
@@ -126,6 +127,12 @@ ${vocabSection || '- Nenhum vocabulário destacado.'}
     now.toISOString(),
     now.toISOString()
   );
+
+  try {
+    scheduleNewEntry(id, 'english');
+  } catch (err) {
+    console.error('Failed to schedule SRS item for entry:', id, err);
+  }
 
   return {
     id,
