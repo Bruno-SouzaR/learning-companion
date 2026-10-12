@@ -1,14 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Sparkles, BookOpen, GraduationCap } from 'lucide-react';
+import { Sparkles, BookOpen, GraduationCap, Flame } from 'lucide-react';
 import { EnglishPreFlight } from '@/components/english-preflight';
 import { ActiveRecall } from '@/components/active-recall';
 import { StudyRecords } from '@/components/study-records';
+import { DailyReview } from '@/components/daily-review';
 import type { RefineResult } from '@/server/llm';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'english' | 'records'>('english');
+  const [activeTab, setActiveTab] = useState<'english' | 'review' | 'records'>('english');
   const [rawInput, setRawInput] = useState<string | null>(null);
   const [refinedResult, setRefinedResult] = useState<RefineResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -53,7 +54,18 @@ export default function Home() {
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>English Pre-Flight</span>
+              <span>Pre-Flight</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('review')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'review'
+                  ? 'bg-amber-600 text-white shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Flame className="w-3.5 h-3.5" />
+              <span>Revisão SRS</span>
             </button>
             <button
               onClick={() => setActiveTab('records')}
@@ -64,7 +76,7 @@ export default function Home() {
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>Study Records</span>
+              <span>Caderno</span>
             </button>
           </nav>
         </div>
@@ -98,6 +110,19 @@ export default function Home() {
                 onReset={handleReset}
               />
             )}
+          </div>
+        ) : activeTab === 'review' ? (
+          <div className="space-y-4">
+            <div className="mb-2">
+              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                <Flame className="w-5 h-5 text-amber-400" />
+                Aquecimento do Dia &bull; Repetição Espaçada
+              </h2>
+              <p className="text-sm text-slate-400 mt-1">
+                Revisão ativa das frases que seu cérebro está prestes a esquecer. Avalie sua facilidade de recall para otimizar os intervalos do SM-2.
+              </p>
+            </div>
+            <DailyReview onComplete={() => setActiveTab('english')} />
           </div>
         ) : (
           <StudyRecords />
