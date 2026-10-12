@@ -39,13 +39,17 @@ Guidelines:
 - In mistakes_summary, be direct, encouraging, and explain the "why" in Portuguese (e.g., prepositions, false friends, word order).
 - Output ONLY pure JSON. No markdown backticks, no conversational preamble.`;
 
-export async function refinePrompt(rawInput: string): Promise<RefineResult> {
+/**
+ * Generic helper to send structured completions to the configured local/remote LLM,
+ * strip markdown code fences, parse JSON, and validate against a Zod schema.
+ */
+export async function callLlmJson<T>(params: {
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  schema: z.ZodType<T>;
+  temperature?: number;
+  maxTokens?: number;
+}): Promise<T> {
   const env = getEnv();
-
-  if (!rawInput || rawInput.trim().length === 0) {
-    throw new Error('Input text cannot be empty');
-  }
-
   const endpoint = `${env.LLM_BASE_URL.replace(/\/+$/, '')}/chat/completions`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -55,15 +59,16 @@ export async function refinePrompt(rawInput: string): Promise<RefineResult> {
     headers['Authorization'] = `Bearer ${env.LLM_API_KEY.trim()}`;
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     model: env.LLM_MODEL,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: rawInput.trim() },
-    ],
-    temperature: 0.3,
+    messages: params.messages,
+    temperature: params.temperature ?? 0.2,
     response_format: { type: 'json_object' },
   };
+
+  if (params.maxTokens) {
+    payload.max_tokens = params.maxTokens;
+  }
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -93,10 +98,25 @@ export async function refinePrompt(rawInput: string): Promise<RefineResult> {
 
   try {
     const parsed = JSON.parse(cleaned);
-    return refineResultSchema.parse(parsed);
+    return params.schema.parse(parsed);
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('Failed to parse LLM JSON:', rawContent);
+    console.error('Failed to parse LLM structured output:', rawContent);
     throw new Error(`Failed to parse LLM structured output: ${errorMessage}`);
   }
+}
+
+export async function refinePrompt(rawInput: string): Promise<RefineResult> {
+  if (!rawInput || rawInput.trim().length === 0) {
+    throw new Error('Input text cannot be empty');
+  }
+
+  return callLlmJson({
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: rawInput.trim() },
+    ],
+    schema: refineResultSchema,
+    temperature: 0.3,
+  });
 }
