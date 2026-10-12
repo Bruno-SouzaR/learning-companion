@@ -91,12 +91,13 @@ export default function Home() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-6 md:py-8 flex flex-col">
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-4 sm:py-6 flex flex-col">
         {activeTab === 'english' ? (
-          <div className={`w-full space-y-6 ${!refinedResult ? 'my-auto py-6 sm:py-10' : ''}`}>
+          <div className="flex-1 flex flex-col w-full">
             {!refinedResult ? (
-              <div className="space-y-6 max-w-3xl mx-auto">
-                <div className="text-center space-y-2.5">
+              <div className="flex-1 flex flex-col w-full max-w-3xl mx-auto">
+                {/* Title and Hero Section positioned close to the top */}
+                <div className="text-center space-y-2 pt-2 sm:pt-4">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 shadow-sm">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                     <span>English Pre-Flight &bull; Pedagogia Local</span>
@@ -109,18 +110,23 @@ export default function Home() {
                   </p>
                 </div>
 
-                <EnglishPreFlight
-                  onRefined={handleRefined}
-                  isLoading={isLoading}
-                  setIsLoading={setIsLoading}
-                />
+                {/* Input Card centered in the remaining space */}
+                <div className="my-auto w-full py-4">
+                  <EnglishPreFlight
+                    onRefined={handleRefined}
+                    isLoading={isLoading}
+                    setIsLoading={setIsLoading}
+                  />
+                </div>
               </div>
             ) : (
-              <ActiveRecall
-                rawInput={rawInput || ''}
-                result={refinedResult}
-                onReset={handleReset}
-              />
+              <div className="space-y-6 w-full">
+                <ActiveRecall
+                  rawInput={rawInput || ''}
+                  result={refinedResult}
+                  onReset={handleReset}
+                />
+              </div>
             )}
           </div>
         ) : activeTab === 'review' ? (
