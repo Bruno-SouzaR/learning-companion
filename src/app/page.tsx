@@ -93,10 +93,6 @@ export default function Home() {
               <div className="flex-1 flex flex-col w-full max-w-3xl mx-auto pt-[10vh] sm:pt-[13vh]">
                 {/* Title and Hero Section shifted down by ~14% */}
                 <div className="text-center space-y-2">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 shadow-sm">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                    <span>English Pre-Flight &bull; Pedagogia Local</span>
-                  </div>
                   <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight">
                     Aprimore sua Comunicação em Inglês
                   </h2>
