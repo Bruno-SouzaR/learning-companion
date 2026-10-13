@@ -89,6 +89,7 @@ src/components/active-recall.tsx (UI) ──────→ src/app/api/save/rou
 - Never modify, relax, or delete test assertions to bypass failures.
 - Never mark a feature or task complete without running and passing the entire test suite (`pnpm test`).
 - Never use cloud storage or network APIs for embeddings: embeddings MUST run 100% in-process via `@xenova/transformers`.
+- Never store raw file dumps or YAML frontmatter into render-facing columns: always persist `matter(raw).content.trim()` and keep one row per document (no loose per-question rows in `entries`).
 - Never show the Active Recall word diff in real-time while typing: the diff MUST only appear on demand and immediately hide upon re-typing.
 - Never commit secrets, real `.env` files, or the SQLite cache file (`data/cache.db`).
 - Never alter the architecture, stack, or conventions without explicit user authorization.
