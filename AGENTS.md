@@ -4,7 +4,7 @@ The single source of truth for any AI agent working in this repository. In case 
 
 ## Stack (Do not alter without explicit instruction)
 
-Next.js `16.3.0` (App Router only) · React `19.2.8` · TypeScript `strict` · Tailwind CSS `v4` · Lucide React · `@xenova/transformers` (`all-MiniLM-L6-v2`) · `node:sqlite` (`DatabaseSync`) · Local LLM (`llama-server` / Qwen 3.5 2B Q8 on Intel Arc 140V Vulkan iGPU) · Zod `3.24` · pnpm `11.11.0`
+Next.js `16.3.0` (App Router only) · React `19.2.8` · TypeScript `strict` · Tailwind CSS `v4` · Lucide React · `@xenova/transformers` (`all-MiniLM-L6-v2`) · `node:sqlite` (`DatabaseSync`) · Local LLM (`llama-server` / Gemma 4 E4B Q5_K_M on Intel Arc 140V Vulkan iGPU) · Zod `3.24` · pnpm `11.11.0`
 
 ## Architecture — Flows & Layers
 
