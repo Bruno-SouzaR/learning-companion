@@ -21,11 +21,13 @@ marked.setOptions({
 export function MarkdownView({ content, className = '' }: MarkdownViewProps) {
   const html = useMemo(() => {
     if (!content || !content.trim()) return '';
+    // Strip leading YAML frontmatter if present so raw frontmatter never renders as text
+    const clean = content.replace(/^---[\s\S]*?---\s*/m, '').trim();
     try {
-      return marked.parse(content) as string;
+      return marked.parse(clean) as string;
     } catch (err) {
       console.error('Failed to parse markdown:', err);
-      return `<p>${content}</p>`;
+      return `<p>${clean}</p>`;
     }
   }, [content]);
 

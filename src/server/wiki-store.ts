@@ -18,6 +18,14 @@ export interface WikiEntryFrontmatter {
   target_en?: string;
 }
 
+export interface StudyQuestion {
+  id: string;
+  sectionIndex: number;
+  question: string;
+  expectedAnswer: string;
+  clozeHint?: string;
+}
+
 export interface StoredEntry {
   id: string;
   title: string;
@@ -30,6 +38,51 @@ export interface StoredEntry {
   tags: string[];
   created_at: string;
   similarity?: number;
+  questions?: StudyQuestion[];
+}
+
+function attachQuestionsToEntry(entry: StoredEntry): StoredEntry {
+  if (entry.module !== 'studies') return entry;
+  try {
+    const db = getDb();
+    const quizRow = db
+      .prepare(`
+        SELECT id
+        FROM study_quizzes
+        WHERE study_entry_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+      `)
+      .get(entry.id) as { id: string } | undefined;
+
+    if (quizRow) {
+      const questions = db
+        .prepare(`
+          SELECT id, section_index, question, expected_answer, cloze_hint
+          FROM quiz_questions
+          WHERE quiz_id = ?
+          ORDER BY section_index ASC
+        `)
+        .all(quizRow.id) as Array<{
+          id: string;
+          section_index: number;
+          question: string;
+          expected_answer: string;
+          cloze_hint: string | null;
+        }>;
+
+      entry.questions = questions.map((q) => ({
+        id: q.id,
+        sectionIndex: q.section_index,
+        question: q.question,
+        expectedAnswer: q.expected_answer,
+        clozeHint: q.cloze_hint || undefined,
+      }));
+    }
+  } catch (err) {
+    console.error('Failed to attach questions to study entry:', entry.id, err);
+  }
+  return entry;
 }
 
 const WIKI_DIR = getWikiDir();
@@ -255,18 +308,24 @@ export function getRecentEntries(limit = 20): StoredEntry[] {
     created_at: string;
   }>;
 
-  return rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    slug: r.slug,
-    module: r.module,
-    file_path: r.file_path,
-    input_pt: r.input_pt || undefined,
-    target_en: r.target_en || undefined,
-    explanation: r.explanation || undefined,
-    tags: JSON.parse(r.tags || '[]'),
-    created_at: r.created_at,
-  }));
+  return rows.map((r) => {
+    const entry: StoredEntry = {
+      id: r.id,
+      title: r.title,
+      slug: r.slug,
+      module: r.module,
+      file_path: r.file_path,
+      input_pt: r.input_pt || undefined,
+      target_en: r.target_en || undefined,
+      explanation: r.explanation || undefined,
+      tags: JSON.parse(r.tags || '[]'),
+      created_at: r.created_at,
+    };
+    if (entry.explanation) {
+      entry.explanation = entry.explanation.replace(/^---[\s\S]*?---\s*/m, '').trim();
+    }
+    return attachQuestionsToEntry(entry);
+  });
 }
 
 /**
@@ -318,7 +377,7 @@ export async function searchWikiEntries(query: string, limit = 10): Promise<Stor
 
     const totalScore = similarity * 0.65 + keywordScore;
 
-    return {
+    const entry: StoredEntry = {
       id: r.id,
       title: r.title,
       slug: r.slug,
@@ -331,8 +390,11 @@ export async function searchWikiEntries(query: string, limit = 10): Promise<Stor
       created_at: r.created_at,
       similarity: Number(totalScore.toFixed(3)),
     };
+    if (entry.explanation) {
+      entry.explanation = entry.explanation.replace(/^---[\s\S]*?---\s*/m, '').trim();
+    }
+    return attachQuestionsToEntry(entry);
   });
-
   scored.sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
   return scored.slice(0, limit);
 }

@@ -374,8 +374,10 @@ ${sectionsMarkdown}
       fs.writeFileSync(filePath, matter.stringify(fullMarkdown, frontmatter), 'utf-8');
     }
 
-    // Index the consolidated document into SQLite entries table
+// Index the consolidated document into SQLite entries table
     const fullContent = fs.readFileSync(filePath, 'utf-8');
+    // Store only clean markdown body (strip YAML frontmatter) in the explanation column
+    const fullMarkdown = matter(fullContent).content.trim();
     const textToEmbed = `${job.title} ${job.topic} ${accumulated.map((s) => s.sectionTitle).join(' ')}`;
     const vector = await generateEmbedding(textToEmbed);
 
@@ -391,7 +393,7 @@ ${sectionsMarkdown}
       job.title,
       job.topic,
       null,
-      fullContent,
+      fullMarkdown,
       JSON.stringify([job.topic.toLowerCase()]),
       vector.length > 0 ? JSON.stringify(vector) : null,
       now.toISOString(),
