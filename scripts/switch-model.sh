@@ -11,6 +11,7 @@ declare -A MODEL_FILES=(
   ["qwen-2b-q5"]="$MODELS_DIR/Qwen3.5-2B-Q5_K_M.gguf"
   ["qwen-2b-q8"]="$MODELS_DIR/Qwen3.5-2B-Q8_0.gguf"
   ["qwen-4b-q5"]="$MODELS_DIR/Qwen3.5-4B-Q5_K_M.gguf"
+  ["glm-ocr"]="$MODELS_DIR/GLM-OCR-Q8_0.gguf"
 )
 
 declare -A MODEL_ALIASES=(
@@ -19,6 +20,7 @@ declare -A MODEL_ALIASES=(
   ["qwen-2b-q5"]="qwen3.5:2b-q5"
   ["qwen-2b-q8"]="qwen3.5:2b-q8"
   ["qwen-4b-q5"]="qwen3.5:4b-q5"
+  ["glm-ocr"]="glm-ocr"
 )
 
 declare -A MODEL_CTX=(
@@ -27,6 +29,7 @@ declare -A MODEL_CTX=(
   ["qwen-2b-q5"]="8192"
   ["qwen-2b-q8"]="4096"
   ["qwen-4b-q5"]="16384"
+  ["glm-ocr"]="8192"
 )
 
 declare -A MODEL_EXTRA_FLAGS=(
@@ -35,6 +38,7 @@ declare -A MODEL_EXTRA_FLAGS=(
   ["qwen-2b-q5"]=""
   ["qwen-2b-q8"]=""
   ["qwen-4b-q5"]=""
+  ["glm-ocr"]="--mmproj $MODELS_DIR/mmproj-GLM-OCR-Q8_0.gguf"
 )
 
 function show_help() {
