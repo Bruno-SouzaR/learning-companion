@@ -55,6 +55,8 @@ export interface StoredEntry {
   target_en?: string;
   explanation?: string;
   tags: string[];
+  status?: 'active' | 'archived';
+  version?: number;
   created_at: string;
   similarity?: number;
   questions?: StudyQuestion[];
@@ -368,8 +370,9 @@ export async function syncWikiToDb(): Promise<number> {
 export function getRecentEntries(limit = 20): StoredEntry[] {
   const db = getDb();
   const rows = db.prepare(`
-    SELECT id, title, slug, module, file_path, input_pt, target_en, explanation, tags, created_at
+    SELECT id, title, slug, module, file_path, input_pt, target_en, explanation, tags, status, version, created_at
     FROM entries
+    WHERE (status IS NULL OR status = 'active')
     ORDER BY created_at DESC
     LIMIT ?
   `).all(limit) as Array<{
@@ -382,6 +385,8 @@ export function getRecentEntries(limit = 20): StoredEntry[] {
     target_en: string | null;
     explanation: string | null;
     tags: string;
+    status: 'active' | 'archived' | null;
+    version: number | null;
     created_at: string;
   }>;
 
@@ -396,6 +401,8 @@ export function getRecentEntries(limit = 20): StoredEntry[] {
       target_en: r.target_en || undefined,
       explanation: r.explanation || undefined,
       tags: JSON.parse(r.tags || '[]'),
+      status: r.status || 'active',
+      version: r.version || 1,
       created_at: r.created_at,
     };
     if (entry.explanation) {
@@ -416,8 +423,9 @@ export async function searchWikiEntries(query: string, limit = 10): Promise<Stor
 
   const queryVector = await generateEmbedding(query);
   const rows = db.prepare(`
-    SELECT id, title, slug, module, file_path, input_pt, target_en, explanation, tags, embedding, created_at
+    SELECT id, title, slug, module, file_path, input_pt, target_en, explanation, tags, status, version, embedding, created_at
     FROM entries
+    WHERE (status IS NULL OR status = 'active')
   `).all() as Array<{
     id: string;
     title: string;
@@ -428,6 +436,8 @@ export async function searchWikiEntries(query: string, limit = 10): Promise<Stor
     target_en: string | null;
     explanation: string | null;
     tags: string;
+    status: 'active' | 'archived' | null;
+    version: number | null;
     embedding: string | null;
     created_at: string;
   }>;
@@ -464,6 +474,8 @@ export async function searchWikiEntries(query: string, limit = 10): Promise<Stor
       target_en: r.target_en || undefined,
       explanation: r.explanation || undefined,
       tags: JSON.parse(r.tags || '[]'),
+      status: r.status || 'active',
+      version: r.version || 1,
       created_at: r.created_at,
       similarity: Number(totalScore.toFixed(3)),
     };
@@ -474,4 +486,21 @@ export async function searchWikiEntries(query: string, limit = 10): Promise<Stor
   });
   scored.sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
   return scored.slice(0, limit);
+}
+/**
+ * Soft-delete an entry by setting its status to 'archived'.
+ * Keeps all data, files, and question attempts intact in SQLite and disk,
+ * but hides the entry from user-facing frontend queries.
+ */
+export function archiveEntry(entryId: string): boolean {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const res = db
+    .prepare(`
+      UPDATE entries
+      SET status = 'archived', updated_at = ?
+      WHERE id = ?
+    `)
+    .run(now, entryId);
+  return res.changes > 0;
 }

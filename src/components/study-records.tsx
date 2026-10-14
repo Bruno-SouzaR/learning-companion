@@ -20,10 +20,10 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import { MarkdownView } from './markdown-view';
 import type { StoredEntry, QuestionAttemptView } from '@/server/wiki-store';
-
 export function StudyRecords() {
   const [query, setQuery] = useState('');
   const [entries, setEntries] = useState<StoredEntry[]>([]);
@@ -36,6 +36,30 @@ export function StudyRecords() {
   const [isRetrying, setIsRetrying] = useState<Record<string, boolean>>({});
   const [retryError, setRetryError] = useState<Record<string, string>>({});
   const [expandedTimelines, setExpandedTimelines] = useState<Record<string, boolean>>({});
+  const [selectedVersionBySlug, setSelectedVersionBySlug] = useState<Record<string, string>>({});
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
+
+  const handleArchive = async (entryId: string) => {
+    setArchivingId(entryId);
+    try {
+      const res = await fetch('/api/study/entry/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: entryId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Falha ao ocultar material');
+      }
+      setEntries((prev) => prev.filter((e) => e.id !== entryId));
+    } catch (err) {
+      console.error('Erro ao arquivar material:', err);
+    } finally {
+      setArchivingId(null);
+      setConfirmArchiveId(null);
+    }
+  };
 
   const handleRetryQuestion = async (questionId: string) => {
     const text = (retryAnswers[questionId] || '').trim();
@@ -139,11 +163,28 @@ export function StudyRecords() {
     }));
   }, [filteredEntries]);
 
-  // Group Study entries (Chapters / Materials)
-  const studyDocuments = useMemo(() => {
-    return filteredEntries.filter((e) => e.module === 'studies');
-  }, [filteredEntries]);
+  // Group Study entries into documents with version history
+  const studyGroups = useMemo(() => {
+    const studyItems = filteredEntries.filter((e) => e.module === 'studies');
+    const map: Record<string, StoredEntry[]> = {};
 
+    for (const item of studyItems) {
+      const key = item.slug || item.title.toLowerCase();
+      if (!map[key]) {
+        map[key] = [];
+      }
+      map[key].push(item);
+    }
+
+    return Object.entries(map).map(([slugKey, versions]) => {
+      versions.sort((a, b) => (b.version || 1) - (a.version || 1));
+      return {
+        slugKey,
+        title: versions[0].title,
+        versions,
+      };
+    });
+  }, [filteredEntries]);
   async function handleCopy(text?: string, id?: string) {
     if (!text) return;
     try {
@@ -243,20 +284,23 @@ export function StudyRecords() {
         )}
 
         {/* 1. SEÇÃO DE ESTUDOS / CAPÍTULOS (com resumos e questões juntas) */}
-        {showStudies && studyDocuments.length > 0 && (
+        {showStudies && studyGroups.length > 0 && (
           <div className="space-y-3">
             {activeModule === 'all' && (
               <div className="flex items-center gap-2 pb-1 border-b border-slate-800/80">
                 <Layers className="w-4 h-4 text-emerald-400" />
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                  Capítulos e Materiais de Estudo ({studyDocuments.length})
+                  Capítulos e Materiais de Estudo ({studyGroups.length})
                 </h3>
               </div>
             )}
 
-            {studyDocuments.map((entry) => {
-              const isExpanded = expandedId === entry.id;
-              const formattedDate = new Date(entry.created_at).toLocaleDateString('pt-BR', {
+            {studyGroups.map((group) => {
+              const activeEntry =
+                group.versions.find((v) => v.id === selectedVersionBySlug[group.slugKey]) ||
+                group.versions[0];
+              const isExpanded = expandedId === activeEntry.id;
+              const formattedDate = new Date(activeEntry.created_at).toLocaleDateString('pt-BR', {
                 day: '2-digit',
                 month: '2-digit',
                 year: 'numeric',
@@ -264,16 +308,48 @@ export function StudyRecords() {
 
               return (
                 <div
-                  key={entry.id}
+                  key={activeEntry.id}
                   className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 hover:border-slate-700/80 transition-all shadow-sm space-y-3"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-950/80 text-emerald-300 border border-emerald-800/60">
                           Estudos
                         </span>
-                        <h3 className="text-base font-bold text-slate-100">{entry.title}</h3>
+
+                        {/* Multi-version switcher pills */}
+                        {group.versions.length > 1 && (
+                          <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-md border border-slate-800 text-xs">
+                            <span className="text-[10px] text-slate-400 font-semibold uppercase px-1">
+                              Versão:
+                            </span>
+                            {group.versions.map((ver) => (
+                              <button
+                                key={ver.id}
+                                type="button"
+                                onClick={() =>
+                                  setSelectedVersionBySlug((prev) => ({
+                                    ...prev,
+                                    [group.slugKey]: ver.id,
+                                  }))
+                                }
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                                  activeEntry.id === ver.id
+                                    ? 'bg-indigo-600 text-white shadow-xs'
+                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                                }`}
+                                title={`Versão ${ver.version || 1} criada em ${new Date(
+                                  ver.created_at
+                                ).toLocaleDateString('pt-BR')}`}
+                              >
+                                v{ver.version || 1}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        <h3 className="text-base font-bold text-slate-100">{activeEntry.title}</h3>
                       </div>
 
                       <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -281,38 +357,75 @@ export function StudyRecords() {
                           <Calendar className="w-3 h-3 text-slate-400" />
                           {formattedDate}
                         </span>
-                        {entry.similarity !== undefined && entry.similarity > 0 && (
+                        {activeEntry.similarity !== undefined && activeEntry.similarity > 0 && (
                           <span className="inline-flex items-center gap-0.5 text-indigo-400 font-mono text-[11px] bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-800/40">
                             <Sparkles className="w-2.5 h-2.5" />
-                            {Math.round(entry.similarity * 100)}% relevância
+                            {Math.round(activeEntry.similarity * 100)}% relevância
                           </span>
                         )}
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => setExpandedId(isExpanded ? null : entry.id)}
-                      aria-label={isExpanded ? 'Recolher material' : 'Expandir material'}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
-                    >
-                      {isExpanded ? (
-                        <>
-                          <ChevronUp className="w-3.5 h-3.5" />
-                          <span>Recolher Material</span>
-                        </>
+                    <div className="flex items-center gap-2">
+                      {confirmArchiveId === activeEntry.id ? (
+                        <div className="flex items-center gap-1 bg-rose-950/80 p-1 rounded-lg border border-rose-800 text-xs">
+                          <span className="text-[10px] text-rose-200 px-1">Ocultar material?</span>
+                          <button
+                            type="button"
+                            onClick={() => handleArchive(activeEntry.id)}
+                            disabled={archivingId === activeEntry.id}
+                            className="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-semibold cursor-pointer text-[10px] flex items-center gap-1"
+                          >
+                            {archivingId === activeEntry.id ? (
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            ) : (
+                              'Confirmar'
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmArchiveId(null)}
+                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer text-[10px]"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
                       ) : (
-                        <>
-                          <ChevronDown className="w-3.5 h-3.5" />
-                          <span>Ler Resumo e Questões</span>
-                        </>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmArchiveId(activeEntry.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors cursor-pointer"
+                          title="Ocultar material do caderno"
+                          aria-label="Ocultar material do caderno"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       )}
-                    </button>
+
+                      <button
+                        onClick={() => setExpandedId(isExpanded ? null : activeEntry.id)}
+                        aria-label={isExpanded ? 'Recolher material' : 'Expandir material'}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                      >
+                        {isExpanded ? (
+                          <>
+                            <ChevronUp className="w-3.5 h-3.5" />
+                            <span>Recolher Material</span>
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                            <span>Ler Resumo e Questões</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Tags */}
-                  {entry.tags && entry.tags.length > 0 && (
+                  {activeEntry.tags && activeEntry.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1">
-                      {entry.tags.map((tag) => (
+                      {activeEntry.tags.map((tag) => (
                         <span
                           key={tag}
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-slate-950 text-slate-400 border border-slate-800/80"
@@ -328,52 +441,60 @@ export function StudyRecords() {
                   {isExpanded && (
                     <div className="pt-3 border-t border-slate-800/80 space-y-3">
                       {/* Resumo accordion */}
-                      {entry.explanation && (
+                      {activeEntry.explanation && (
                         <div className="rounded-lg border border-slate-800 overflow-hidden bg-slate-950/40">
                           <button
                             type="button"
-                            onClick={() => setExpandedConcepts((prev) => ({ ...prev, [`resumo-${entry.id}`]: !prev[`resumo-${entry.id}`] }))}
+                            onClick={() =>
+                              setExpandedConcepts((prev) => ({
+                                ...prev,
+                                [`resumo-${activeEntry.id}`]: !prev[`resumo-${activeEntry.id}`],
+                              }))
+                            }
                             className="w-full px-4 py-2 flex items-center justify-between bg-slate-900/60 text-xs font-semibold text-slate-200 cursor-pointer hover:bg-slate-800/40 transition-colors"
                           >
                             <span className="flex items-center gap-1.5">
                               <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
                               Resumo do Material
                             </span>
-                            {expandedConcepts[`resumo-${entry.id}`] ? (
+                            {expandedConcepts[`resumo-${activeEntry.id}`] ? (
                               <ChevronUp className="w-4 h-4 text-slate-400" />
                             ) : (
                               <ChevronDown className="w-4 h-4 text-slate-400" />
                             )}
                           </button>
-                          {expandedConcepts[`resumo-${entry.id}`] && (
+                          {expandedConcepts[`resumo-${activeEntry.id}`] && (
                             <div className="p-4">
-                              <MarkdownView content={entry.explanation} />
+                              <MarkdownView content={activeEntry.explanation} />
                             </div>
                           )}
                         </div>
                       )}
-
-                      {/* Questões accordion */}
-                      {entry.questions && entry.questions.length > 0 && (
+                      {activeEntry.questions && activeEntry.questions.length > 0 && (
                         <div className="rounded-lg border border-slate-800 overflow-hidden bg-slate-950/40">
                           <button
                             type="button"
-                            onClick={() => setExpandedConcepts((prev) => ({ ...prev, [`questoes-${entry.id}`]: !prev[`questoes-${entry.id}`] }))}
+                            onClick={() =>
+                              setExpandedConcepts((prev) => ({
+                                ...prev,
+                                [`questoes-${activeEntry.id}`]: !prev[`questoes-${activeEntry.id}`],
+                              }))
+                            }
                             className="w-full px-4 py-2 flex items-center justify-between bg-slate-900/60 text-xs font-semibold text-slate-200 cursor-pointer hover:bg-slate-800/40 transition-colors"
                           >
                             <span className="flex items-center gap-1.5">
                               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                              Questões de Fixação ({entry.questions.length})
+                              Questões de Fixação ({activeEntry.questions.length})
                             </span>
-                            {expandedConcepts[`questoes-${entry.id}`] ? (
+                            {expandedConcepts[`questoes-${activeEntry.id}`] ? (
                               <ChevronUp className="w-4 h-4 text-slate-400" />
                             ) : (
                               <ChevronDown className="w-4 h-4 text-slate-400" />
                             )}
                           </button>
-                          {expandedConcepts[`questoes-${entry.id}`] && (
+                          {expandedConcepts[`questoes-${activeEntry.id}`] && (
                             <div className="p-4 space-y-2.5">
-                              {entry.questions.map((q, qi) => (
+                              {activeEntry.questions.map((q, qi) => (
                                 <div key={q.id} className="p-3.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-2.5">
                                   {/* Header with question number and score badge */}
                                   <div className="flex items-center justify-between">

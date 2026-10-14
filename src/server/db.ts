@@ -39,13 +39,16 @@ export function getDb(): DatabaseSync {
       explanation TEXT,
       tags TEXT NOT NULL DEFAULT '[]',
       embedding TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      version INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_entries_module ON entries(module);
     CREATE INDEX IF NOT EXISTS idx_entries_created_at ON entries(created_at DESC);
-
+    CREATE INDEX IF NOT EXISTS idx_entries_status ON entries(status);
+    CREATE INDEX IF NOT EXISTS idx_entries_slug ON entries(slug);
     CREATE TABLE IF NOT EXISTS study_sessions (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -157,6 +160,7 @@ export function getDb(): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_attempts_quiz ON question_attempts(quiz_id);
   `);
 
+  migrateEntryColumns(dbInstance);
   migrateIngestJobColumns(dbInstance);
   migrateQuizQuestionColumns(dbInstance);
   migrateStudyQuizColumns(dbInstance);
@@ -164,6 +168,17 @@ export function getDb(): DatabaseSync {
   return dbInstance;
 }
 
+function migrateEntryColumns(db: DatabaseSync): void {
+  const columns = db.prepare('PRAGMA table_info(entries)').all() as Array<{ name: string }>;
+  const names = new Set(columns.map((c) => c.name));
+
+  if (!names.has('status')) {
+    db.exec(`ALTER TABLE entries ADD COLUMN status TEXT DEFAULT 'active';`);
+  }
+  if (!names.has('version')) {
+    db.exec(`ALTER TABLE entries ADD COLUMN version INTEGER DEFAULT 1;`);
+  }
+}
 /**
  * Idempotent migration: adds columns introduced after the table was created
  * (existing local SQLite databases). Safe to run on every boot.

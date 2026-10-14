@@ -60,9 +60,18 @@ export function createIngestJob(params: {
 }): IngestJob {
   const db = getDb();
   const now = new Date().toISOString();
-  const id = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  const entryId = `studies_${Date.now()}_${slugify(params.title)}`;
+  const slug = slugify(params.title);
 
+  // Auto-detect if a version already exists for this slug
+  const existingRow = db
+    .prepare('SELECT MAX(version) as max_v FROM entries WHERE slug = ?')
+    .get(slug) as { max_v: number | null } | undefined;
+  const version = (existingRow?.max_v || 0) + 1;
+
+  const id = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const entryId = version > 1
+    ? `studies_${Date.now()}_${slug}_v${version}`
+    : `studies_${Date.now()}_${slug}`;
   db.prepare(`
     INSERT INTO ingest_jobs (
       id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, current_step, started_at, created_at, updated_at
@@ -348,9 +357,14 @@ export async function processDocumentInBackground(jobId: string, rawText: string
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
     const slug = slugify(job.title);
-    const filePath = path.join(STUDIES_DIR, `${dateStr}-${slug}.md`);
 
-    updateJobStep(jobId, 'Fatiando documento em seções semânticas...');
+    // Auto-detect version to generate versioned file name if previous exists
+    const existingRow = db
+      .prepare('SELECT MAX(version) as max_v FROM entries WHERE slug = ?')
+      .get(slug) as { max_v: number | null } | undefined;
+    const version = (existingRow?.max_v || 0) + 1;
+    const fileName = version > 1 ? `${dateStr}-${slug}-v${version}.md` : `${dateStr}-${slug}.md`;
+    const filePath = path.join(STUDIES_DIR, fileName);
 
     if (!fs.existsSync(STUDIES_DIR)) {
       fs.mkdirSync(STUDIES_DIR, { recursive: true });
@@ -384,6 +398,7 @@ export async function processDocumentInBackground(jobId: string, rawText: string
         id: job.entryId,
         title: job.title,
         slug,
+        version,
         module: 'studies',
         topic: job.topic,
         total_chunks: chunks.length,
@@ -427,8 +442,8 @@ ${sectionsMarkdown}
     const finalEntryId = job.entryId || `studies_${Date.now()}_${slug}`;
     db.prepare(`
       INSERT OR REPLACE INTO entries (
-        id, slug, file_path, module, title, input_pt, target_en, explanation, tags, embedding, created_at, updated_at
-      ) VALUES (?, ?, ?, 'studies', ?, ?, ?, ?, ?, ?, ?, ?)
+        id, slug, file_path, module, title, input_pt, target_en, explanation, tags, embedding, status, version, created_at, updated_at
+      ) VALUES (?, ?, ?, 'studies', ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
     `).run(
       finalEntryId,
       slug,
@@ -439,6 +454,7 @@ ${sectionsMarkdown}
       fullMarkdown,
       JSON.stringify([job.topic.toLowerCase()]),
       vector.length > 0 ? JSON.stringify(vector) : null,
+      version,
       now.toISOString(),
       now.toISOString()
     );
