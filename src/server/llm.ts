@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getEnv } from './env';
+import { getEnv, getEnglishModel } from './env';
 
 export const refineResultSchema = z.object({
   title: z.string().describe('Short descriptive title in Portuguese for this practice entry'),
@@ -53,9 +53,12 @@ export async function requestChatCompletion(params: {
   temperature?: number;
   maxTokens?: number;
   jsonMode?: boolean;
+  model?: string;
+  baseUrl?: string;
 }): Promise<LlmResponse> {
   const env = getEnv();
-  const endpoint = `${env.LLM_BASE_URL.replace(/\/+$/, '')}/chat/completions`;
+  const baseUrl = params.baseUrl || env.LLM_BASE_URL;
+  const endpoint = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -65,7 +68,7 @@ export async function requestChatCompletion(params: {
   }
 
   const payload: Record<string, unknown> = {
-    model: env.LLM_MODEL,
+    model: params.model || env.LLM_MODEL,
     messages: params.messages,
     temperature: params.temperature ?? 0.2,
   };
@@ -110,15 +113,19 @@ export async function requestChatCompletion(params: {
  */
 export async function callLlmJson<T>(params: {
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-  schema: z.ZodType<T>;
+  schema: z.ZodType<T, z.ZodTypeDef, any>;
   temperature?: number;
   maxTokens?: number;
+  model?: string;
+  baseUrl?: string;
 }): Promise<T> {
   const { content: rawContent } = await requestChatCompletion({
     messages: params.messages,
     temperature: params.temperature,
     maxTokens: params.maxTokens,
     jsonMode: true,
+    model: params.model,
+    baseUrl: params.baseUrl,
   });
 
   // Extract JSON object if wrapped in conversational text or markdown code fences
@@ -151,10 +158,10 @@ export async function callLlmMarkdown(params: {
   temperature?: number;
   maxTokens?: number;
   maxContinuations?: number;
+  model?: string;
+  baseUrl?: string;
 }): Promise<string> {
   const maxContinuations = params.maxContinuations ?? 3;
-  let messages: LlmResponse['content'][] = [];
-
   let result = '';
   let continuation = 0;
   let messagesBase = [...params.messages];
@@ -164,6 +171,8 @@ export async function callLlmMarkdown(params: {
       messages: messagesBase,
       temperature: params.temperature,
       maxTokens: params.maxTokens,
+      model: params.model,
+      baseUrl: params.baseUrl,
     });
 
     result += response.content;
@@ -188,7 +197,10 @@ export async function callLlmMarkdown(params: {
   return result;
 }
 
-export async function refinePrompt(rawInput: string): Promise<RefineResult> {
+export async function refinePrompt(
+  rawInput: string,
+  options?: { model?: string; baseUrl?: string }
+): Promise<RefineResult> {
   if (!rawInput || rawInput.trim().length === 0) {
     throw new Error('Input text cannot be empty');
   }
@@ -199,6 +211,8 @@ export async function refinePrompt(rawInput: string): Promise<RefineResult> {
       { role: 'user', content: rawInput.trim() },
     ],
     schema: refineResultSchema,
-    temperature: 0.3,
+    temperature: 0.2,
+    model: options?.model || getEnglishModel(),
+    baseUrl: options?.baseUrl,
   });
 }
