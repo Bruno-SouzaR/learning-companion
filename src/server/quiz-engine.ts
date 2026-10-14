@@ -103,14 +103,14 @@ export async function generateQuizFromStudyEntry(
 ): Promise<QuizSession> {
   const db = getDb();
   let entry = db
-    .prepare('SELECT id, title, explanation, tags FROM entries WHERE id = ?')
-    .get(studyEntryId) as { id: string; title: string; explanation: string; tags: string } | undefined;
+    .prepare('SELECT id, title, explanation, tags, version FROM entries WHERE id = ?')
+    .get(studyEntryId) as { id: string; title: string; explanation: string; tags: string; version: number } | undefined;
 
-  // Fallback 1: Lookup via slug if client passed a slug
+  // Fallback 1: Lookup via slug if client passed a slug (respecting latest version)
   if (!entry) {
     entry = db
-      .prepare('SELECT id, title, explanation, tags FROM entries WHERE slug = ?')
-      .get(studyEntryId) as { id: string; title: string; explanation: string; tags: string } | undefined;
+      .prepare('SELECT id, title, explanation, tags, version FROM entries WHERE slug = ? ORDER BY version DESC LIMIT 1')
+      .get(studyEntryId) as { id: string; title: string; explanation: string; tags: string; version: number } | undefined;
   }
 
   // Fallback 2: Lookup via ingest_jobs if client passed jobId
@@ -121,8 +121,8 @@ export async function generateQuizFromStudyEntry(
 
     if (jobRow?.entry_id) {
       entry = db
-        .prepare('SELECT id, title, explanation, tags FROM entries WHERE id = ?')
-        .get(jobRow.entry_id) as { id: string; title: string; explanation: string; tags: string } | undefined;
+        .prepare('SELECT id, title, explanation, tags, version FROM entries WHERE id = ?')
+        .get(jobRow.entry_id) as { id: string; title: string; explanation: string; tags: string; version: number } | undefined;
     }
   }
 
@@ -170,7 +170,7 @@ Output ONLY pure JSON strictly matching this schema:
     INSERT INTO study_quizzes (
       id, study_entry_id, title, topic, status, total_questions, score, weak_sections, created_at, updated_at
     ) VALUES (?, ?, ?, ?, 'pending', ?, NULL, '[]', ?, ?)
-  `).run(quizId, studyEntryId, entry.title, topic, generated.questions.length, now, now);
+  `).run(quizId, entry.id, entry.title, topic, generated.questions.length, now, now);
 
   const clientQuestions: ClientQuizQuestion[] = [];
 

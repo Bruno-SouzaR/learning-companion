@@ -583,13 +583,16 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngest
                   {!isSectionCollapsed && (
                     <>
                       {sec.keyPoints && sec.keyPoints.length > 0 && (
-                        <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800/60">
-                          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
-                            Pontos Nucleares:
+                        <div className="bg-slate-900/70 p-4 sm:p-5 rounded-xl border border-slate-800/80 space-y-2.5">
+                          <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                            Pontos Nucleares da Seção:
                           </span>
-                          <ul className="text-xs text-slate-300 space-y-1 pl-4 list-disc marker:text-indigo-400">
+                          <ul className="text-sm sm:text-[15px] text-slate-200 space-y-2.5 pl-5 list-disc marker:text-indigo-400 leading-relaxed">
                             {sec.keyPoints.map((kp, kIdx) => (
-                              <li key={kIdx}>{kp}</li>
+                              <li key={kIdx} className="pl-1">
+                                {kp}
+                              </li>
                             ))}
                           </ul>
                         </div>

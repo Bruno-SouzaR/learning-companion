@@ -67,7 +67,7 @@ function attachQuestionsToEntry(entry: StoredEntry): StoredEntry {
   if (entry.module !== 'studies') return entry;
   try {
     const db = getDb();
-    const quizRow = db
+    let quizRow = db
       .prepare(`
         SELECT id
         FROM study_quizzes
@@ -76,6 +76,19 @@ function attachQuestionsToEntry(entry: StoredEntry): StoredEntry {
         LIMIT 1
       `)
       .get(entry.id) as { id: string } | undefined;
+
+    // Fallback for legacy v1 entries where study_entry_id was saved as slug
+    if (!quizRow && (entry.version === 1 || !entry.version)) {
+      quizRow = db
+        .prepare(`
+          SELECT id
+          FROM study_quizzes
+          WHERE study_entry_id = ?
+          ORDER BY created_at DESC
+          LIMIT 1
+        `)
+        .get(entry.slug) as { id: string } | undefined;
+    }
 
     if (quizRow) {
       const questions = db

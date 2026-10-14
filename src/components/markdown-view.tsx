@@ -33,24 +33,24 @@ export function MarkdownView({ content, className = '' }: MarkdownViewProps) {
 
   return (
     <div
-      className={`prose prose-invert max-w-none text-slate-200 text-xs sm:text-sm leading-relaxed
-        [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-slate-100 [&_h1]:mt-4 [&_h1]:mb-2
-        [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-slate-100 [&_h2]:mt-4 [&_h2]:mb-2
-        [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-indigo-300 [&_h3]:mt-3 [&_h3]:mb-1.5
-        [&_h4]:text-xs [&_h4]:font-semibold [&_h4]:text-slate-200 [&_h4]:mt-2 [&_h4]:mb-1
-        [&_p]:my-2 [&_p]:text-slate-300 [&_p]:leading-relaxed
-        [&_ul]:my-2 [&_ul]:pl-5 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:text-slate-300
-        [&_ol]:my-2 [&_ol]:pl-5 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:text-slate-300
+      className={`prose prose-invert max-w-none text-slate-300 text-xs sm:text-sm xl:text-[15px] leading-relaxed
+        [&_h1]:text-xl sm:[&_h1]:text-2xl [&_h1]:font-extrabold [&_h1]:text-slate-100 [&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:tracking-tight
+        [&_h2]:text-lg sm:[&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-slate-100 [&_h2]:mt-5 [&_h2]:mb-2.5 [&_h2]:tracking-tight
+        [&_h3]:text-base sm:[&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-indigo-300 [&_h3]:mt-4 [&_h3]:mb-2
+        [&_h4]:text-sm sm:[&_h4]:text-base [&_h4]:font-semibold [&_h4]:text-slate-200 [&_h4]:mt-3 [&_h4]:mb-1.5
+        [&_p]:my-2.5 [&_p]:text-slate-300 [&_p]:leading-relaxed
+        [&_ul]:my-2.5 [&_ul]:pl-5 [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:text-slate-300
+        [&_ol]:my-2.5 [&_ol]:pl-5 [&_ol]:list-decimal [&_ol]:space-y-1.5 [&_ol]:text-slate-300
         [&_li]:leading-relaxed
         [&_strong]:font-semibold [&_strong]:text-slate-100
-        [&_blockquote]:pl-3.5 [&_blockquote]:border-l-2 [&_blockquote]:border-indigo-500 [&_blockquote]:italic [&_blockquote]:text-slate-400 [&_blockquote]:my-2.5
-        [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:bg-slate-900 [&_code]:text-indigo-300 [&_code]:border [&_code]:border-slate-800 [&_code]:font-mono [&_code]:text-[11px]
-        [&_pre]:p-3.5 [&_pre]:rounded-lg [&_pre]:bg-slate-950 [&_pre]:border [&_pre]:border-slate-800 [&_pre]:overflow-x-auto [&_pre]:my-3
-        [&_pre_code]:p-0 [&_pre_code]:bg-transparent [&_pre_code]:border-0 [&_pre_code]:text-xs [&_pre_code]:text-slate-200
-        [&_table]:w-full [&_table]:my-3 [&_table]:border-collapse [&_table]:text-xs
-        [&_th]:p-2.5 [&_th]:bg-slate-900 [&_th]:text-slate-200 [&_th]:font-semibold [&_th]:border [&_th]:border-slate-800 [&_th]:text-left
-        [&_td]:p-2.5 [&_td]:bg-slate-950/60 [&_td]:text-slate-300 [&_td]:border [&_td]:border-slate-800/80
-        [&_hr]:border-slate-800 [&_hr]:my-4
+        [&_blockquote]:pl-4 [&_blockquote]:border-l-2 [&_blockquote]:border-indigo-500 [&_blockquote]:italic [&_blockquote]:text-slate-400 [&_blockquote]:my-3
+        [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:bg-slate-900 [&_code]:text-indigo-300 [&_code]:border [&_code]:border-slate-800 [&_code]:font-mono [&_code]:text-[11px] sm:[&_code]:text-xs
+        [&_pre]:p-4 [&_pre]:rounded-xl [&_pre]:bg-slate-950 [&_pre]:border [&_pre]:border-slate-800 [&_pre]:overflow-x-auto [&_pre]:my-3.5
+        [&_pre_code]:p-0 [&_pre_code]:bg-transparent [&_pre_code]:border-0 [&_pre_code]:text-xs sm:[&_pre_code]:text-sm [&_pre_code]:text-slate-200
+        [&_table]:w-full [&_table]:my-4 [&_table]:border-collapse [&_table]:text-xs sm:[&_table]:text-sm
+        [&_th]:p-3 [&_th]:bg-slate-900 [&_th]:text-slate-200 [&_th]:font-semibold [&_th]:border [&_th]:border-slate-800 [&_th]:text-left
+        [&_td]:p-3 [&_td]:bg-slate-950/60 [&_td]:text-slate-300 [&_td]:border [&_td]:border-slate-800/80
+        [&_hr]:border-slate-800 [&_hr]:my-5
         ${className}`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
