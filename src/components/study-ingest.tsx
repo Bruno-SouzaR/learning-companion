@@ -21,6 +21,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { MarkdownView } from './markdown-view';
+import { ActiveStatusBar } from './active-status-bar';
 import type { IngestJob, CompletedSectionData } from '@/server/ingest-job-manager';
 import type { QuizSession, QuizEvaluationResult } from '@/server/quiz-engine';
 interface StudyIngestProps {
@@ -436,7 +437,7 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
                 ? 'Síntese completa concluída'
                 : isFailed
                 ? `Erro: ${activeJob.errorMessage || 'Falha no processamento'}`
-                : `Processando com Gemma 4 (Seção ${completedCount + 1} de ${activeJob.totalSections})...`}
+                : activeJob.currentStep || `Processando Seção ${completedCount + 1} de ${activeJob.totalSections}...`}
             </p>
           </div>
 
@@ -496,24 +497,21 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
                 </button>
               </div>
             )}
-        </div>
-
-        {/* Progress Stepper Bar */}
-        {!isCompleted && !isFailed && (
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs text-slate-400">
-              <span>
-                Fatia <strong>{completedCount}</strong> de <strong>{activeJob.totalSections}</strong> pronta para leitura
-              </span>
-              <span className="font-mono text-indigo-400">{progressPercent}%</span>
-            </div>
-            <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
-              <div
-                className="bg-indigo-500 h-full transition-all duration-500 rounded-full"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
           </div>
+        </div>
+        {/* OMP-Style Live Status Bar (Timer • Contextual Step • Adaptive ETA • Progress) */}
+        {!isCompleted && !isFailed && (
+          <ActiveStatusBar
+            currentStep={activeJob.currentStep}
+            progressPercent={progressPercent}
+            startedAt={activeJob.startedAt || activeJob.createdAt}
+            completedCount={completedCount}
+            totalCount={activeJob.totalSections}
+            isCompleted={isCompleted}
+            isFailed={isFailed}
+            errorMessage={activeJob.errorMessage}
+            label="seções"
+          />
         )}
 
         {/* Progressive Section Reading Stream */}
@@ -569,6 +567,23 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
                 </article>
               );
             })}
+
+            {/* Active Skeleton Card: Shows user that the next section is actively being generated */}
+            {!isCompleted && !isFailed && (
+              <div className="p-5 md:p-6 rounded-xl bg-slate-950/40 border border-slate-800/80 border-dashed space-y-2.5 animate-pulse">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-amber-950/60 text-amber-300 border border-amber-900/60">
+                    Em Elaboração
+                  </span>
+                  <h4 className="text-sm font-bold text-slate-300">
+                    Sintetizando Seção {completedCount + 1} de {activeJob.totalSections}...
+                  </h4>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Estruturando definições teóricas, mecanismos práticos e tabelas conceituais. Esta seção será liberada automaticamente para leitura assim que for finalizada.
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800 text-center flex items-center justify-between">
@@ -583,19 +598,6 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
             </button>
           </div>
         )}
-
-          {!isCompleted && !isFailed && (
-            <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center space-y-2">
-              <Loader2 className="w-5 h-5 animate-spin text-indigo-400 mx-auto" />
-              <p className="text-xs text-slate-400">
-                Sintetizando Seção {completedCount + 1} de {activeJob.totalSections} em segundo plano...
-              </p>
-              <span className="text-[11px] text-slate-400 block">
-                Você pode começar a ler as seções acima imediatamente. O progresso continua mesmo se você sair.
-              </span>
-            </div>
-          )}
-        </div>
         {/* Unified Interactive Section (Quiz / Evaluation) on the SAME screen */}
         {quizEvaluation ? (
           <div className="pt-6 border-t border-slate-800 space-y-6">
@@ -822,6 +824,20 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
                 </button>
               </div>
             )}
+          </div>
+        ) : isGeneratingQuiz ? (
+          <div className="pt-6 border-t border-slate-800 space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded-md bg-indigo-950/80 border border-indigo-800 text-indigo-400">
+                <BrainCircuit className="w-4 h-4 animate-pulse" />
+              </span>
+              <h3 className="text-base font-bold text-slate-100">Gerando Questões de Fixação</h3>
+            </div>
+            <ActiveStatusBar
+              currentStep="Elaborando 10 questões de active recall distribuídas pelas seções..."
+              progressPercent={50}
+              label="questões"
+            />
           </div>
         ) : quizSession ? (
           <div className="pt-6 border-t border-slate-800 space-y-6">

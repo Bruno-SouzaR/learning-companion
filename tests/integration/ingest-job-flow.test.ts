@@ -101,7 +101,7 @@ describe('Integration: Background Processing, Continuity & Stale Recovery', () =
 
     expect(stale).toBeDefined();
     expect(stale?.status).toBe('failed');
-    expect(stale?.errorMessage).toContain('reinicio');
+    expect(stale?.errorMessage).toMatch(/rein[ií]cio/i);
   });
 
   it('lists recent jobs descending by creation time', async () => {

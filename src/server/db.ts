@@ -101,6 +101,8 @@ export function getDb(): DatabaseSync {
       file_path TEXT,
       entry_id TEXT,
       error_message TEXT,
+      current_step TEXT,
+      started_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -157,6 +159,7 @@ export function getDb(): DatabaseSync {
 
   migrateIngestJobColumns(dbInstance);
   migrateQuizQuestionColumns(dbInstance);
+  migrateStudyQuizColumns(dbInstance);
 
   return dbInstance;
 }
@@ -167,12 +170,25 @@ export function getDb(): DatabaseSync {
  */
 function migrateIngestJobColumns(db: DatabaseSync): void {
   const columns = db.prepare('PRAGMA table_info(ingest_jobs)').all() as Array<{ name: string }>;
-  const hasEntryId = columns.some((c) => c.name === 'entry_id');
+  const names = new Set(columns.map((c) => c.name));
 
-  if (!hasEntryId) {
-    db.exec(`
-      ALTER TABLE ingest_jobs ADD COLUMN entry_id TEXT;
-    `);
+  if (!names.has('entry_id')) {
+    db.exec(`ALTER TABLE ingest_jobs ADD COLUMN entry_id TEXT;`);
+  }
+  if (!names.has('current_step')) {
+    db.exec(`ALTER TABLE ingest_jobs ADD COLUMN current_step TEXT;`);
+  }
+  if (!names.has('started_at')) {
+    db.exec(`ALTER TABLE ingest_jobs ADD COLUMN started_at TEXT;`);
+  }
+}
+
+function migrateStudyQuizColumns(db: DatabaseSync): void {
+  const columns = db.prepare('PRAGMA table_info(study_quizzes)').all() as Array<{ name: string }>;
+  const names = new Set(columns.map((c) => c.name));
+
+  if (!names.has('current_step')) {
+    db.exec(`ALTER TABLE study_quizzes ADD COLUMN current_step TEXT;`);
   }
 }
 

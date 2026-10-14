@@ -25,6 +25,8 @@ export interface IngestJob {
   filePath?: string | null;
   entryId?: string | null;
   errorMessage?: string | null;
+  currentStep?: string | null;
+  startedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -63,9 +65,9 @@ export function createIngestJob(params: {
 
   db.prepare(`
     INSERT INTO ingest_jobs (
-      id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, created_at, updated_at
-    ) VALUES (?, ?, ?, 'processing', ?, '[]', NULL, ?, NULL, ?, ?)
-  `).run(id, params.title.trim(), params.topic.trim(), params.totalSections, entryId, now, now);
+      id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, current_step, started_at, created_at, updated_at
+    ) VALUES (?, ?, ?, 'processing', ?, '[]', NULL, ?, NULL, 'Iniciando fatiamento e estruturação...', ?, ?, ?)
+  `).run(id, params.title.trim(), params.topic.trim(), params.totalSections, entryId, now, now, now);
 
   return {
     id,
@@ -77,6 +79,8 @@ export function createIngestJob(params: {
     filePath: null,
     entryId,
     errorMessage: null,
+    currentStep: 'Iniciando fatiamento e estruturação...',
+    startedAt: now,
     createdAt: now,
     updatedAt: now,
   };
@@ -89,7 +93,7 @@ export function getIngestJob(jobId: string): IngestJob | null {
   const db = getDb();
   const row = db
     .prepare(`
-      SELECT id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, created_at, updated_at
+      SELECT id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, current_step, started_at, created_at, updated_at
       FROM ingest_jobs
       WHERE id = ?
     `)
@@ -103,6 +107,8 @@ export function getIngestJob(jobId: string): IngestJob | null {
       file_path: string | null;
       entry_id: string | null;
       error_message: string | null;
+      current_step: string | null;
+      started_at: string | null;
       created_at: string;
       updated_at: string;
     } | undefined;
@@ -126,6 +132,8 @@ export function getIngestJob(jobId: string): IngestJob | null {
     filePath: row.file_path,
     entryId: row.entry_id,
     errorMessage: row.error_message,
+    currentStep: row.current_step,
+    startedAt: row.started_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -142,7 +150,7 @@ export function listRecentIngestJobs(limit = INGEST_RECENT_LIMIT): IngestJob[] {
 
   const rows = db
     .prepare(`
-      SELECT id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, created_at, updated_at
+      SELECT id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, current_step, started_at, created_at, updated_at
       FROM ingest_jobs
       ORDER BY created_at DESC
       LIMIT ?
@@ -157,6 +165,8 @@ export function listRecentIngestJobs(limit = INGEST_RECENT_LIMIT): IngestJob[] {
       file_path: string | null;
       entry_id: string | null;
       error_message: string | null;
+      current_step: string | null;
+      started_at: string | null;
       created_at: string;
       updated_at: string;
     }>;
@@ -180,16 +190,32 @@ export function listRecentIngestJobs(limit = INGEST_RECENT_LIMIT): IngestJob[] {
       filePath: row.file_path,
       entryId: row.entry_id,
       errorMessage: row.error_message,
+      currentStep: row.current_step,
+      startedAt: row.started_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
   });
 }
 
+export function updateJobStep(jobId: string, currentStep: string): void {
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE ingest_jobs
+    SET current_step = ?, updated_at = ?
+    WHERE id = ?
+  `).run(currentStep, now, jobId);
+}
+
 /**
  * Record a newly synthesized section onto the active job.
  */
-export function updateJobSection(jobId: string, section: CompletedSectionData): IngestJob {
+export function updateJobSection(
+  jobId: string,
+  section: CompletedSectionData,
+  currentStep?: string
+): IngestJob {
   const db = getDb();
   const job = getIngestJob(jobId);
 
@@ -200,15 +226,24 @@ export function updateJobSection(jobId: string, section: CompletedSectionData): 
   const updatedSections = [...job.completedSections, section];
   const now = new Date().toISOString();
 
-  db.prepare(`
-    UPDATE ingest_jobs
-    SET completed_sections = ?, updated_at = ?
-    WHERE id = ?
-  `).run(JSON.stringify(updatedSections), now, jobId);
+  if (currentStep) {
+    db.prepare(`
+      UPDATE ingest_jobs
+      SET completed_sections = ?, current_step = ?, updated_at = ?
+      WHERE id = ?
+    `).run(JSON.stringify(updatedSections), currentStep, now, jobId);
+  } else {
+    db.prepare(`
+      UPDATE ingest_jobs
+      SET completed_sections = ?, updated_at = ?
+      WHERE id = ?
+    `).run(JSON.stringify(updatedSections), now, jobId);
+  }
 
   return {
     ...job,
     completedSections: updatedSections,
+    currentStep: currentStep || job.currentStep,
     updatedAt: now,
   };
 }
@@ -280,7 +315,7 @@ function rawReconcileStaleJobs(): void {
     if (!running.has(orphan.id)) {
       db.prepare(`
         UPDATE ingest_jobs
-        SET status = 'failed', error_message = 'Proceso interrumpido por reinicio del servidor.', updated_at = ?
+        SET status = 'failed', error_message = 'Processo interrompido por reinício do servidor.', updated_at = ?
         WHERE id = ? AND status = 'processing'
       `).run(nowIso, orphan.id);
     }
@@ -315,11 +350,15 @@ export async function processDocumentInBackground(jobId: string, rawText: string
     const slug = slugify(job.title);
     const filePath = path.join(STUDIES_DIR, `${dateStr}-${slug}.md`);
 
+    updateJobStep(jobId, 'Fatiando documento em seções semânticas...');
+
     if (!fs.existsSync(STUDIES_DIR)) {
       fs.mkdirSync(STUDIES_DIR, { recursive: true });
     }
 
     for (let i = 0; i < chunks.length; i++) {
+      updateJobStep(jobId, `Sintetizando conceitos da Seção ${i + 1} de ${chunks.length}...`);
+
       const section = await synthesizeSection({
         title: job.title,
         topic: job.topic,
@@ -335,8 +374,12 @@ export async function processDocumentInBackground(jobId: string, rawText: string
         markdown: section.markdown,
       };
       accumulated.push(sectionData);
-      updateJobSection(jobId, sectionData);
 
+      const nextStep =
+        i + 1 < chunks.length
+          ? `Seção ${i + 1} pronta. Iniciando Seção ${i + 2} de ${chunks.length}...`
+          : 'Finalizando formatação das seções...';
+      updateJobSection(jobId, sectionData, nextStep);
       const frontmatter = {
         id: job.entryId,
         title: job.title,
@@ -399,8 +442,9 @@ ${sectionsMarkdown}
       now.toISOString(),
       now.toISOString()
     );
-
+    updateJobStep(jobId, 'Indexando material no caderno de estudos...');
     completeIngestJob(jobId, filePath);
+    updateJobStep(jobId, 'Síntese completa concluída.');
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido na síntese';
     console.error(`[IngestJob ${jobId}] síntese em segundo plano falhou:`, error);

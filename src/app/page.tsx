@@ -139,7 +139,7 @@ export default function Home() {
                 Ingestão de Materiais &amp; PDFs
               </h2>
               <p className="text-sm text-slate-400 max-w-xl mx-auto leading-relaxed">
-                Envie capítulos de livros, PDFs ou notas de aula. O Gemma 4 fatia o documento, sintetiza resumos seccionais e gera questões de Active Recall para o seu SRS.
+                Envie capítulos de livros, PDFs ou notas de aula. O sistema fatia o documento, sintetiza resumos seccionais e gera questões de Active Recall para o seu SRS.
               </p>
             </div>
             <StudyIngest
