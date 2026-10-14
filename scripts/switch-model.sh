@@ -10,6 +10,7 @@ declare -A MODEL_FILES=(
   ["gemma-4-e4b"]="$MODELS_DIR/google_gemma-4-E4B-it-Q5_K_M.gguf"
   ["qwen-2b-q5"]="$MODELS_DIR/Qwen3.5-2B-Q5_K_M.gguf"
   ["qwen-2b-q8"]="$MODELS_DIR/Qwen3.5-2B-Q8_0.gguf"
+  ["qwen-4b-q5"]="$MODELS_DIR/Qwen3.5-4B-Q5_K_M.gguf"
 )
 
 declare -A MODEL_ALIASES=(
@@ -17,6 +18,7 @@ declare -A MODEL_ALIASES=(
   ["gemma-4-e4b"]="gemma-4-e4b"
   ["qwen-2b-q5"]="qwen3.5:2b-q5"
   ["qwen-2b-q8"]="qwen3.5:2b-q8"
+  ["qwen-4b-q5"]="qwen3.5:4b-q5"
 )
 
 declare -A MODEL_CTX=(
@@ -24,6 +26,7 @@ declare -A MODEL_CTX=(
   ["gemma-4-e4b"]="65536"
   ["qwen-2b-q5"]="8192"
   ["qwen-2b-q8"]="4096"
+  ["qwen-4b-q5"]="16384"
 )
 
 declare -A MODEL_EXTRA_FLAGS=(
@@ -31,6 +34,7 @@ declare -A MODEL_EXTRA_FLAGS=(
   ["gemma-4-e4b"]="-ctk q8_0 -ctv q8_0"
   ["qwen-2b-q5"]=""
   ["qwen-2b-q8"]=""
+  ["qwen-4b-q5"]=""
 )
 
 function show_help() {
