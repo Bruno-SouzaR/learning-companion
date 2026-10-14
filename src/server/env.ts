@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
 const envSchema = z.object({
-  LLM_BASE_URL: z.string().default('https://api.groq.com/openai/v1'),
+  LLM_BASE_URL: z.string().default('http://127.0.0.1:8080/v1'),
   LLM_API_KEY: z.string().default(''),
-  LLM_MODEL: z.string().default('llama-3.1-8b-instant'),
+  LLM_MODEL: z.string().default('qwen3.5:4b-q5'),
   LLM_MODEL_ENGLISH: z.string().optional(),
   LLM_MODEL_STUDIES: z.string().optional(),
   LLM_BASE_URL_STUDIES: z.string().optional(),
