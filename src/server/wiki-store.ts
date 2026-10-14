@@ -329,8 +329,30 @@ export async function syncWikiToDb(): Promise<number> {
         const slug = data.slug || file.replace(/\.md$/, '');
         const title = data.title || file.replace(/\.md$/, '');
         const tags = Array.isArray(data.tags) ? data.tags : [];
-        const createdAt = data.created_at || new Date().toISOString();
-        const updatedAt = data.updated_at || createdAt;
+        const anyData = data as Record<string, unknown>;
+        const rawCreated = anyData.created_at;
+        const createdAt =
+          typeof rawCreated === 'string'
+            ? rawCreated
+            : rawCreated instanceof Date
+            ? (rawCreated as Date).toISOString()
+            : new Date().toISOString();
+
+        const rawUpdated = anyData.updated_at;
+        const updatedAt =
+          typeof rawUpdated === 'string'
+            ? rawUpdated
+            : rawUpdated instanceof Date
+            ? (rawUpdated as Date).toISOString()
+            : createdAt;
+        const version =
+          typeof anyData.version === 'number'
+            ? anyData.version
+            : /-v(\d+)\.md$/i.test(file)
+            ? parseInt(file.match(/-v(\d+)\.md$/i)?.[1] || '1', 10)
+            : 1;
+
+        const status = (anyData.status as string) || 'active';
 
         // Check if already indexed with embedding
         const existing = db.prepare('SELECT embedding FROM entries WHERE id = ?').get(id) as { embedding?: string } | undefined;
@@ -344,10 +366,13 @@ export async function syncWikiToDb(): Promise<number> {
           }
         }
 
+        // Clean up any stale/orphan record pointing to this same physical file with an outdated id
+        db.prepare('DELETE FROM entries WHERE file_path = ? AND id != ?').run(fullPath, id);
+
         const upsert = db.prepare(`
           INSERT OR REPLACE INTO entries (
-            id, slug, file_path, module, title, input_pt, target_en, explanation, tags, embedding, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, slug, file_path, module, title, input_pt, target_en, explanation, tags, embedding, status, version, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         upsert.run(
@@ -361,10 +386,11 @@ export async function syncWikiToDb(): Promise<number> {
           parsed.content,
           JSON.stringify(tags),
           embeddingStr || null,
+          status,
+          version,
           createdAt,
           updatedAt
         );
-
         indexedCount++;
       } catch (e) {
         console.error(`Failed to sync file ${fullPath}:`, e);

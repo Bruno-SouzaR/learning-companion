@@ -24,5 +24,7 @@ export function sanitizePortugueseMarkdown(text: string): string {
     .replace(/\bsecciones\b/g, 'seções')
     .replace(/\bSecciones\b/g, 'Seções')
     .replace(/\bPontos\s+Clave\b/gi, 'Pontos Nucleares')
-    .replace(/\bResumen\s+Estructurado\b/gi, 'Resumo Estruturado');
+    .replace(/\bResumen\s+Estructurado\b/gi, 'Resumo Estruturado')
+    // Defensively strip leaked bibliography and Explore+ subtopics
+    .replace(/\n#{1,4}\s*(?:Refer[êe]ncias\s+Bibliogr[áa]ficas|Bibliografia|Explore\+|Saiba\s+Mais|Fontes)[\s\S]*?(?=\n#{1,3}\s|\n\s*---\s*\n|$)/gi, '');
 }

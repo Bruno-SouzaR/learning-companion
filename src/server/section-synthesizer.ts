@@ -123,7 +123,8 @@ RULES & CONSTRAINTS:
      - Separation between items using blank lines
    - If the source compares mechanisms, include a markdown table "| Mecanismo | Vantagens | Desvantagens |".
 4. CODE BLOCKS MUST always be closed with three backticks; never inline backticks colocated with text.
-5. NEVER merge, group, or skip any item listed by the source. Expand ALL of them.`;
+5. NEVER merge, group, or skip technical engineering concepts listed by the source. Expand ALL of them.
+6. IGNORE EDITORIAL & BIBLIOGRAPHIC SECTIONS: NEVER synthesize subtopics, definitions, or examples for "Referências Bibliográficas", "Bibliografia", "Explore+", "Saiba Mais", "Fontes", or review question evaluation headers. Completely omit these non-conceptual sections.`;
 
 /**
  * Synthesize one section of a study document as pure Markdown, extending

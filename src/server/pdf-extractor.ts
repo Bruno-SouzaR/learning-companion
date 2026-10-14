@@ -21,13 +21,26 @@ export function estimateDocumentTokens(text: string): number {
 }
 
 /**
+ * Strip trailing editorial meta-sections like Bibliografia, Referências Bibliográficas,
+ * Explore+, Saiba Mais, and Book Questionnaire evaluations from the end of textbook chapters.
+ */
+export function stripTrailingEditorialSections(text: string): string {
+  if (!text || text.trim().length === 0) return '';
+
+  const tailRegex = /\n(?:\d+[\.\s]+)?(?:Refer[êe]ncias\s+Bibliogr[áa]ficas|Bibliografia|Fontes\s+Bibliogr[áa]ficas|Explore\+|Saiba\s+Mais|Leituras\s+Recomendadas|Avalia[cç][aã]o\s+do\s+Tema)\b[\s\S]*$/i;
+
+  return text.replace(tailRegex, '').trim();
+}
+
+/**
  * Clean raw extracted PDF text: normalizes linebreaks, removes page markers,
- * collapses redundant whitespace while preserving paragraph structure.
+ * collapses redundant whitespace while preserving paragraph structure and stripping
+ * trailing textbook meta-sections (bibliographies, explore+).
  */
 export function cleanExtractedText(rawText: string): string {
   if (!rawText || rawText.trim().length === 0) return '';
 
-  return rawText
+  const baseCleaned = rawText
     .replace(/\r\n/g, '\n')
     // Remove common PDF page headers/footers like "Page 12 of 100" or standalone numbers
     .replace(/^\s*(?:page\s+\d+(?:\s+of\s+\d+)?|\d+)\s*$/gim, '')
@@ -40,6 +53,8 @@ export function cleanExtractedText(rawText: string): string {
     // Replace 3+ consecutive newlines with double newlines (paragraphs)
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+  return stripTrailingEditorialSections(baseCleaned);
 }
 
 /**
