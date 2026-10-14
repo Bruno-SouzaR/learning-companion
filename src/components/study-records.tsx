@@ -21,10 +21,15 @@ import {
   AlertCircle,
   RotateCcw,
   Trash2,
+  BrainCircuit,
 } from 'lucide-react';
 import { MarkdownView } from './markdown-view';
 import type { StoredEntry, QuestionAttemptView } from '@/server/wiki-store';
-export function StudyRecords() {
+interface StudyRecordsProps {
+  onPracticeEntry?: (entryId: string) => void;
+}
+
+export function StudyRecords({ onPracticeEntry }: StudyRecordsProps = {}) {
   const [query, setQuery] = useState('');
   const [entries, setEntries] = useState<StoredEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -352,11 +357,28 @@ export function StudyRecords() {
                         <h3 className="text-base font-bold text-slate-100">{activeEntry.title}</h3>
                       </div>
 
-                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3 text-slate-400" />
-                          {formattedDate}
+                          Criado em {formattedDate}
                         </span>
+
+                        {activeEntry.lastInteractedAt && (
+                          <>
+                            <span className="text-slate-600 hidden sm:inline">&bull;</span>
+                            <span className="flex items-center gap-1 text-slate-300">
+                              <History className="w-3 h-3 text-indigo-400" />
+                              Última interação: {new Date(activeEntry.lastInteractedAt).toLocaleDateString('pt-BR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </>
+                        )}
+
                         {activeEntry.similarity !== undefined && activeEntry.similarity > 0 && (
                           <span className="inline-flex items-center gap-0.5 text-indigo-400 font-mono text-[11px] bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-800/40">
                             <Sparkles className="w-2.5 h-2.5" />
@@ -402,6 +424,17 @@ export function StudyRecords() {
                         </button>
                       )}
 
+                      {onPracticeEntry && (
+                        <button
+                          type="button"
+                          onClick={() => onPracticeEntry(activeEntry.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-300 bg-emerald-950/80 border border-emerald-800/60 hover:bg-emerald-900/60 transition-colors cursor-pointer shadow-xs"
+                          title="Abrir este material para leitura e prática na aba Estudos"
+                        >
+                          <BrainCircuit className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Praticar</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => setExpandedId(isExpanded ? null : activeEntry.id)}
                         aria-label={isExpanded ? 'Recolher material' : 'Expandir material'}

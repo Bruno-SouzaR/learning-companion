@@ -124,16 +124,134 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('jobId');
+    const entryId = searchParams.get('entryId');
 
-    // No jobId → list recent jobs for UI continuity
+    // If entryId is provided, load the consolidated material directly into the study view
+    if (entryId && entryId.trim()) {
+      const db = getDb();
+      const entry = db
+        .prepare('SELECT id, title, explanation, tags, created_at, updated_at FROM entries WHERE id = ?')
+        .get(entryId.trim()) as
+        | {
+            id: string;
+            title: string;
+            explanation: string | null;
+            tags: string;
+            created_at: string;
+            updated_at: string;
+          }
+        | undefined;
+
+      if (!entry) {
+        return NextResponse.json(
+          { success: false, error: `Material com id "${entryId}" não encontrado.` },
+          { status: 404 }
+        );
+      }
+
+      const parsedTags = JSON.parse(entry.tags || '[]');
+      const topic = parsedTags[0] || 'Geral';
+      const cleanExp = (entry.explanation || '').replace(/^---[\s\S]*?---\s*/m, '').trim();
+
+      // Split sections by \n## or ---
+      const rawSections = cleanExp.split(/\n(?=##\s+\d+)/g).filter(Boolean);
+      const completedSections = (rawSections.length > 0 ? rawSections : [cleanExp]).map((sec, idx) => {
+        const lines = sec.trim().split('\n');
+        const titleLine = lines[0] || `Seção ${idx + 1}`;
+        const sectionTitle = titleLine.replace(/^##\s*(?:\d+\.\s*)?/, '').trim();
+        return {
+          sectionIndex: idx + 1,
+          sectionTitle: sectionTitle || `Seção ${idx + 1}`,
+          keyPoints: [],
+          markdown: sec.trim(),
+        };
+      });
+
+      const syntheticJob = {
+        id: `entry_${entry.id}`,
+        title: entry.title,
+        topic,
+        status: 'completed',
+        totalSections: Math.max(1, completedSections.length),
+        completedSections,
+        entryId: entry.id,
+        currentStep: 'Síntese pronta para leitura e simulado.',
+        createdAt: entry.created_at,
+        updatedAt: entry.updated_at,
+      };
+
+      let latestQuiz: QuizSession | null = null;
+      const quizRow = db
+        .prepare(`
+          SELECT id, study_entry_id, title, topic, status, total_questions, score, weak_sections, created_at
+          FROM study_quizzes
+          WHERE study_entry_id = ?
+          ORDER BY created_at DESC
+          LIMIT 1
+        `)
+        .get(entry.id) as
+        | {
+            id: string;
+            study_entry_id: string;
+            title: string;
+            topic: string;
+            status: string;
+            total_questions: number;
+            score: number | null;
+            weak_sections: string;
+            created_at: string;
+          }
+        | undefined;
+
+      if (quizRow) {
+        const questions = db
+          .prepare(`
+            SELECT id, section_index, question, cloze_hint
+            FROM quiz_questions
+            WHERE quiz_id = ?
+            ORDER BY section_index ASC
+          `)
+          .all(quizRow.id) as Array<{
+            id: string;
+            section_index: number;
+            question: string;
+            cloze_hint: string | null;
+          }>;
+
+        latestQuiz = {
+          id: quizRow.id,
+          studyEntryId: quizRow.study_entry_id,
+          title: quizRow.title,
+          topic: quizRow.topic,
+          status: quizRow.status as 'pending' | 'completed',
+          totalQuestions: quizRow.total_questions,
+          score: quizRow.score,
+          weakSections: JSON.parse(quizRow.weak_sections || '[]'),
+          questions: questions.map((q) => ({
+            id: q.id,
+            sectionIndex: q.section_index,
+            question: q.question,
+            clozeHint: q.cloze_hint || undefined,
+          })),
+          createdAt: quizRow.created_at,
+        };
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: syntheticJob,
+        quiz: latestQuiz,
+      });
+    }
+
+    // No jobId → list recent jobs for UI continuity (limit 3, failed excluded)
     if (!jobId || !jobId.trim()) {
-      const recent = listRecentIngestJobs();
+      const recent = listRecentIngestJobs(3, { includeFailed: false, includeDismissed: false });
       return NextResponse.json({
         success: true,
         data: { jobs: recent },
       });
     }
-
     const job = getIngestJob(jobId.trim());
 
     if (!job) {

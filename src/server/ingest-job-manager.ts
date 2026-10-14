@@ -7,7 +7,7 @@ import { slugify } from './wiki-store';
 import { generateEmbedding } from './embeddings';
 import { chunkTextBySections, cleanExtractedText, estimateDocumentTokens } from './pdf-extractor';
 import { synthesizeSection } from './section-synthesizer';
-
+import { logIngestError } from './logger';
 export interface CompletedSectionData {
   sectionIndex: number;
   sectionTitle: string;
@@ -32,8 +32,7 @@ export interface IngestJob {
 }
 
 export const INGEST_CHUNK_TOKENS = 4800;
-export const INGEST_RECENT_LIMIT = 10;
-
+export const INGEST_RECENT_LIMIT = 3;
 const WIKI_DIR = getWikiDir();
 const STUDIES_DIR = path.join(WIKI_DIR, 'studies');
 
@@ -152,18 +151,32 @@ export function getIngestJob(jobId: string): IngestJob | null {
  * List recent ingest jobs. Danger: this drives UI continuity, so it must also
  * reconcile jobs orphaned by a server restart into a visible failed state.
  */
-export function listRecentIngestJobs(limit = INGEST_RECENT_LIMIT): IngestJob[] {
+export function listRecentIngestJobs(
+  limit = INGEST_RECENT_LIMIT,
+  options?: { includeFailed?: boolean; includeDismissed?: boolean }
+): IngestJob[] {
   const db = getDb();
 
   rawReconcileStaleJobs();
 
+  const includeFailed = options?.includeFailed ?? true;
+  const includeDismissed = options?.includeDismissed ?? false;
+
+  let sql = `
+    SELECT id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, current_step, started_at, created_at, updated_at
+    FROM ingest_jobs
+    WHERE 1=1
+  `;
+  if (!includeFailed) {
+    sql += " AND status != 'failed'";
+  }
+  if (!includeDismissed) {
+    sql += " AND (is_dismissed IS NULL OR is_dismissed = 0)";
+  }
+  sql += ' ORDER BY created_at DESC LIMIT ?';
+
   const rows = db
-    .prepare(`
-      SELECT id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, current_step, started_at, created_at, updated_at
-      FROM ingest_jobs
-      ORDER BY created_at DESC
-      LIMIT ?
-    `)
+    .prepare(sql)
     .all(limit) as Array<{
       id: string;
       title: string;
@@ -303,12 +316,35 @@ export function failIngestJob(jobId: string, error: string): IngestJob {
     WHERE id = ?
   `).run(error, now, jobId);
 
+  logIngestError({
+    jobId,
+    title: job.title,
+    step: job.currentStep,
+    error,
+  });
+
   return {
     ...job,
     status: 'failed',
     errorMessage: error,
     updatedAt: now,
   };
+}
+/**
+ * Dismiss an ingest job from the user-facing continuity banner.
+ * Preserves the database record and telemetry for debugging.
+ */
+export function dismissIngestJob(jobId: string): boolean {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const res = db
+    .prepare(`
+      UPDATE ingest_jobs
+      SET is_dismissed = 1, updated_at = ?
+      WHERE id = ?
+    `)
+    .run(now, jobId);
+  return res.changes > 0;
 }
 
 function rawReconcileStaleJobs(): void {

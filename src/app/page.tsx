@@ -14,7 +14,7 @@ export default function Home() {
   const [rawInput, setRawInput] = useState<string | null>(null);
   const [refinedResult, setRefinedResult] = useState<RefineResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
+  const [activeStudyEntryId, setActiveStudyEntryId] = useState<string | null>(null);
   function handleRefined(input: string, result: RefineResult) {
     setRawInput(input);
     setRefinedResult(result);
@@ -144,6 +144,7 @@ export default function Home() {
             </div>
             <StudyIngest
               onNavigateToRecords={() => setActiveTab('records')}
+              initialEntryId={activeStudyEntryId}
             />
           </div>
         ) : activeTab === 'review' ? (
@@ -168,7 +169,12 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          <StudyRecords />
+          <StudyRecords
+            onPracticeEntry={(entryId) => {
+              setActiveStudyEntryId(entryId);
+              setActiveTab('ingest');
+            }}
+          />
         )}
       </main>
 

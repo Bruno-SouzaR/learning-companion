@@ -58,6 +58,7 @@ export interface StoredEntry {
   status?: 'active' | 'archived';
   version?: number;
   created_at: string;
+  lastInteractedAt?: string;
   similarity?: number;
   questions?: StudyQuestion[];
 }
@@ -157,6 +158,14 @@ function attachQuestionsToEntry(entry: StoredEntry): StoredEntry {
           attempts: qAttempts,
         };
       });
+    }
+
+    const lastAttemptRow = db
+      .prepare('SELECT MAX(created_at) as last_att FROM question_attempts WHERE study_entry_id = ?')
+      .get(entry.id) as { last_att: string | null } | undefined;
+
+    if (lastAttemptRow?.last_att) {
+      entry.lastInteractedAt = lastAttemptRow.last_att;
     }
   } catch (err) {
     console.error('Failed to attach questions to study entry:', entry.id, err);

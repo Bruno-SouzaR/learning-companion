@@ -19,6 +19,7 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
+  X,
 } from 'lucide-react';
 import { MarkdownView } from './markdown-view';
 import { ActiveStatusBar } from './active-status-bar';
@@ -26,9 +27,10 @@ import type { IngestJob, CompletedSectionData } from '@/server/ingest-job-manage
 import type { QuizSession, QuizEvaluationResult } from '@/server/quiz-engine';
 interface StudyIngestProps {
   onNavigateToRecords?: () => void;
+  initialEntryId?: string | null;
 }
 
-export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
+export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngestProps) {
   // Input form state
   const [inputMode, setInputMode] = useState<'file' | 'text'>('file');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -149,6 +151,38 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
       }
       return updated;
     });
+  };
+  // Auto-load material directly if initialEntryId is supplied (e.g. from Caderno "Praticar Material")
+  useEffect(() => {
+    if (!initialEntryId) return;
+    const loadEntry = async () => {
+      try {
+        const res = await fetch(`/api/study/ingest?entryId=${encodeURIComponent(initialEntryId)}`);
+        const json = await res.json();
+        if (json.success && json.data) {
+          setActiveJob(json.data);
+          if (json.quiz) {
+            setQuizSession(json.quiz);
+          }
+        }
+      } catch (err) {
+        console.error('Falha ao carregar material selecionado:', err);
+      }
+    };
+    void loadEntry();
+  }, [initialEntryId]);
+
+  const handleDismissJob = async (jobId: string) => {
+    try {
+      setRecentJobs((prev) => prev.filter((j) => j.id !== jobId));
+      await fetch('/api/study/ingest/dismiss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      });
+    } catch (err) {
+      console.error('Falha ao dispensar trabalho:', err);
+    }
   };
   // Polling for active background job
   useEffect(() => {
@@ -972,30 +1006,43 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
   const banner = recentJobs.length > 0 ? (
     <div className="space-y-3 rounded-xl bg-slate-800/50 border border-slate-700/60 p-4">
       <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block">
-        Continuidade de Material em Procesamento
+        Materiais Recentes em Andamento ({Math.min(3, recentJobs.length)})
       </span>
       <div className="space-y-1.5">
-        {recentJobs.slice(0, 5).map((job) => (
-          <button
-            key={job.id}
-            onClick={() => handleOpenJob(job.id)}
-            className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-300 hover:bg-slate-700/50 bg-slate-800/30 border border-slate-800 transition-colors cursor-pointer"
-          >
-            <span className="truncate">{job.title}</span>
-            <span className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-semibold ${
-              job.status === 'completed' ? 'bg-emerald-900/70 text-emerald-300'
-              : job.status === 'failed' ? 'bg-rose-900/70 text-rose-300'
-              : 'bg-indigo-900/70 text-indigo-300'
-            }`}>
-              {job.status === 'completed' ? `Completado · ${job.totalSections}p`
-              : job.status === 'failed' ? 'Falido'
-              : `Procesando · ${job.totalSections}p`}
-            </span>
-          </button>
+        {recentJobs.slice(0, 3).map((job) => (
+          <div key={job.id} className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleOpenJob(job.id)}
+              className="flex-1 flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-300 hover:bg-slate-700/50 bg-slate-800/30 border border-slate-800 transition-colors cursor-pointer truncate"
+            >
+              <span className="truncate">{job.title}</span>
+              <span className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                job.status === 'completed'
+                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60'
+                  : 'bg-indigo-950/80 text-indigo-300 border border-indigo-800/60'
+              }`}>
+                {job.status === 'completed' ? `Concluído · ${job.totalSections}p` : `Processando · ${job.totalSections}p`}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDismissJob(job.id);
+              }}
+              className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors cursor-pointer shrink-0"
+              title="Dispensar do painel recente"
+              aria-label="Dispensar trabalho"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         ))}
       </div>
       <p className="text-[11px] text-slate-400">
-        Selecione um trabalho para retomar a leitura ou a avaliação. A síntese continua em segundo plano mesmo se você fechar esta aba.
+        Selecione um material para retomar a leitura ou praticar o simulado. O histórico completo está no Caderno.
       </p>
     </div>
   ) : null;

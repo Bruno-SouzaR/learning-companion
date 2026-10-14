@@ -106,6 +106,7 @@ export function getDb(): DatabaseSync {
       error_message TEXT,
       current_step TEXT,
       started_at TEXT,
+      is_dismissed INTEGER DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -151,8 +152,8 @@ export function getDb(): DatabaseSync {
       created_at TEXT NOT NULL,
       FOREIGN KEY(question_id) REFERENCES quiz_questions(id) ON DELETE CASCADE
     );
-
     CREATE INDEX IF NOT EXISTS idx_jobs_status ON ingest_jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_jobs_dismissed ON ingest_jobs(is_dismissed, status);
     CREATE INDEX IF NOT EXISTS idx_quizzes_entry ON study_quizzes(study_entry_id);
     CREATE INDEX IF NOT EXISTS idx_quiz_questions_quiz ON quiz_questions(quiz_id);
     CREATE INDEX IF NOT EXISTS idx_attempts_question ON question_attempts(question_id, created_at DESC);
@@ -195,6 +196,9 @@ function migrateIngestJobColumns(db: DatabaseSync): void {
   }
   if (!names.has('started_at')) {
     db.exec(`ALTER TABLE ingest_jobs ADD COLUMN started_at TEXT;`);
+  }
+  if (!names.has('is_dismissed')) {
+    db.exec(`ALTER TABLE ingest_jobs ADD COLUMN is_dismissed INTEGER DEFAULT 0;`);
   }
 }
 
