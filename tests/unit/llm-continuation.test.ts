@@ -57,7 +57,7 @@ describe('Unit: LLM Markdown Continuation (A3)', () => {
     const secondInit = calls[1][1] ?? {};
     const secondDump = JSON.stringify(secondInit.body);
     expect(secondDump).toContain('Primera parte truncada');
-    expect(secondDump).toContain('Continúa exactamente');
+    expect(secondDump).toContain('Continue exactly from where you left off');
   });
 
   it('stops continuing after maxContinuations even if still truncated', async () => {

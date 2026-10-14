@@ -37,13 +37,13 @@ describe('Unit: SectionMarkdown Parser', () => {
   });
 
   it('falls back to generic title for empty or heading-less input', () => {
-    expect(parseSectionMarkdown('').sectionTitle).toBe('Sección sin título');
-    expect(parseSectionMarkdown('Solo texto suelto.').sectionTitle).toBe('Sección sin título');
+    expect(parseSectionMarkdown('').sectionTitle).toBe('Seção sem título');
+    expect(parseSectionMarkdown('Solo texto suelto.').sectionTitle).toBe('Seção sem título');
   });
 
   it('provides the mandatory structure rules for the LLM', () => {
     expect(SECTION_STANDARDS_PROMPT).toContain('Pontos Nucleares');
-    expect(SECTION_STANDARDS_PROMPT.toLowerCase()).toContain('definición teórica');
+    expect(SECTION_STANDARDS_PROMPT).toContain('Definição Teórica');
     expect(SECTION_STANDARDS_PROMPT.toLowerCase()).toContain('omissions');
   });
 });

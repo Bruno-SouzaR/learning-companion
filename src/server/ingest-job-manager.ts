@@ -402,8 +402,8 @@ ${sectionsMarkdown}
 
     completeIngestJob(jobId, filePath);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Error desconocido en el sнntesis';
-    console.error(`[IngestJob ${jobId}] sнntesis de fondo falló:`, error);
+    const message = error instanceof Error ? error.message : 'Erro desconhecido na síntese';
+    console.error(`[IngestJob ${jobId}] síntese em segundo plano falhou:`, error);
     failIngestJob(jobId, message);
   } finally {
     running.delete(jobId);

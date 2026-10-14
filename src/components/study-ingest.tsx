@@ -80,7 +80,6 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
     return () => clearInterval(timer);
   }, []);
 
-
   // Quiz state
   const [quizSession, setQuizSession] = useState<QuizSession | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
@@ -88,6 +87,68 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
   const [isSubmittingQuiz, setIsSubmittingQuiz] = useState(false);
   const [quizEvaluation, setQuizEvaluation] = useState<QuizEvaluationResult | null>(null);
 
+  // Auto-restore last active job from localStorage on initial mount
+  useEffect(() => {
+    try {
+      const lastJobId = localStorage.getItem('learning_active_job_id');
+      if (lastJobId && !activeJob) {
+        void fetch(`/api/study/ingest?jobId=${encodeURIComponent(lastJobId)}`)
+          .then((r) => r.json())
+          .then((json) => {
+            if (json.success && json.data) {
+              setActiveJob(json.data);
+            }
+          });
+      }
+    } catch (e) {
+      console.warn('Falha ao restaurar job ativo do localStorage:', e);
+    }
+  }, []);
+
+  // Persist activeJob id to localStorage
+  useEffect(() => {
+    if (activeJob?.id) {
+      try {
+        localStorage.setItem('learning_active_job_id', activeJob.id);
+      } catch {}
+    }
+  }, [activeJob?.id]);
+
+  // Rehydrate draft answers or evaluation whenever quizSession changes
+  useEffect(() => {
+    if (!quizSession) return;
+    try {
+      const savedDraft = localStorage.getItem(`learning_quiz_answers_${quizSession.id}`);
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed && typeof parsed === 'object') {
+          setQuizAnswers((prev) => ({ ...parsed, ...prev }));
+        }
+      }
+      const savedEval = localStorage.getItem(`learning_quiz_eval_${quizSession.id}`);
+      if (savedEval) {
+        const parsedEval = JSON.parse(savedEval);
+        if (parsedEval && parsedEval.quizId === quizSession.id) {
+          setQuizEvaluation(parsedEval);
+        }
+      }
+    } catch (e) {
+      console.warn('Falha ao reidratar rascunho de simulado:', e);
+    }
+  }, [quizSession?.id]);
+
+  // Update answers state and persist directly to localStorage
+  const handleAnswerInput = (questionId: string, val: string) => {
+    setQuizAnswers((prev) => {
+      const updated = { ...prev, [questionId]: val };
+      if (quizSession?.id) {
+        try {
+          localStorage.setItem(`learning_quiz_answers_${quizSession.id}`, JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
+  };
   // Polling for active background job
   useEffect(() => {
     if (!activeJob || activeJob.status === 'completed' || activeJob.status === 'failed') {
@@ -281,8 +342,12 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
       if (!res.ok || !json.success) {
         throw new Error(json.error || 'Falha ao avaliar simulado.');
       }
-
       setQuizEvaluation(json.data);
+      if (quizSession?.id) {
+        try {
+          localStorage.setItem(`learning_quiz_eval_${quizSession.id}`, JSON.stringify(json.data));
+        } catch {}
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao submeter simulado.';
       setErrorMessage(message);
@@ -649,6 +714,19 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
                           >
                             {res.isCorrect ? 'Acerto' : 'Revisar'}
                           </span>
+                          {res.scorePercentage !== undefined && (
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                                res.scorePercentage >= 70
+                                  ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50'
+                                  : res.scorePercentage >= 40
+                                  ? 'bg-amber-950/60 text-amber-400 border-amber-800/50'
+                                  : 'bg-rose-950/60 text-rose-400 border-rose-800/50'
+                              }`}
+                            >
+                              {res.scorePercentage}% precisão
+                            </span>
+                          )}
                           <span className="text-xs px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800 font-mono">
                             Seção {res.sectionIndex}
                           </span>
@@ -683,13 +761,44 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
                     </div>
 
                     {isCardExpanded && (
-                      <div className="mt-3 pt-3 border-t border-slate-800/60 text-xs space-y-2">
+                      <div className="mt-3 pt-3 border-t border-slate-800/60 text-xs space-y-2.5">
                         <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-900/40">
                           <span className="text-emerald-400 font-semibold block mb-0.5">Resposta Esperada Oficial:</span>
                           <p className="text-slate-100">{res.expectedAnswer}</p>
                         </div>
+
+                        {res.whatWasGood ? (
+                          <div className="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-900/50 text-emerald-200 flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                            <div>
+                              <strong className="block text-emerald-300 font-semibold mb-0.5">O que você explicou bem:</strong>
+                              <span>{res.whatWasGood}</span>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {res.whatWasMissing ? (
+                          <div className="p-2.5 rounded-lg bg-amber-950/30 border border-amber-900/50 text-amber-200 flex items-start gap-2">
+                            <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                            <div>
+                              <strong className="block text-amber-300 font-semibold mb-0.5">O que poderia complementar:</strong>
+                              <span>{res.whatWasMissing}</span>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {res.misconceptionsFeedback ? (
+                          <div className="p-2.5 rounded-lg bg-rose-950/30 border border-rose-900/50 text-rose-200 flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                            <div>
+                              <strong className="block text-rose-300 font-semibold mb-0.5">Ponto de Atenção Conceitual:</strong>
+                              <span>{res.misconceptionsFeedback}</span>
+                            </div>
+                          </div>
+                        ) : null}
+
                         <div className="text-slate-300 italic pt-1">
-                          <strong>Feedback:</strong> {res.feedback}
+                          <strong>Diagnóstico Geral:</strong> {res.feedback}
                         </div>
                       </div>
                     )}
@@ -782,7 +891,7 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
                     id={q.id}
                     rows={2}
                     value={quizAnswers[q.id] || ''}
-                    onChange={(e) => setQuizAnswers({ ...quizAnswers, [q.id]: e.target.value })}
+                    onChange={(e) => handleAnswerInput(q.id, e.target.value)}
                     placeholder="Digite sua resposta de memória aqui..."
                     disabled={isSubmittingQuiz}
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none"
@@ -870,7 +979,7 @@ export function StudyIngest({ onNavigateToRecords }: StudyIngestProps) {
         ))}
       </div>
       <p className="text-[11px] text-slate-400">
-        Selecciona un trabajo para reanudar la lectura o la evaluación. La síntesis continua en segundo plano aunque cierres esta pestaña.
+        Selecione um trabalho para retomar a leitura ou a avaliação. A síntese continua em segundo plano mesmo se você fechar esta aba.
       </p>
     </div>
   ) : null;

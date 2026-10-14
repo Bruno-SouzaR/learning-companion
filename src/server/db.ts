@@ -131,13 +131,32 @@ export function getDb(): DatabaseSync {
       created_at TEXT NOT NULL,
       FOREIGN KEY(quiz_id) REFERENCES study_quizzes(id) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS question_attempts (
+      id TEXT PRIMARY KEY,
+      question_id TEXT NOT NULL,
+      quiz_id TEXT NOT NULL,
+      study_entry_id TEXT NOT NULL,
+      attempt_number INTEGER NOT NULL DEFAULT 1,
+      user_answer TEXT NOT NULL,
+      score_percentage INTEGER NOT NULL DEFAULT 0,
+      is_correct INTEGER NOT NULL DEFAULT 0,
+      what_was_good TEXT,
+      what_was_missing TEXT,
+      misconceptions_feedback TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(question_id) REFERENCES quiz_questions(id) ON DELETE CASCADE
+    );
 
     CREATE INDEX IF NOT EXISTS idx_jobs_status ON ingest_jobs(status);
     CREATE INDEX IF NOT EXISTS idx_quizzes_entry ON study_quizzes(study_entry_id);
     CREATE INDEX IF NOT EXISTS idx_quiz_questions_quiz ON quiz_questions(quiz_id);
+    CREATE INDEX IF NOT EXISTS idx_attempts_question ON question_attempts(question_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_attempts_entry ON question_attempts(study_entry_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_attempts_quiz ON question_attempts(quiz_id);
   `);
 
   migrateIngestJobColumns(dbInstance);
+  migrateQuizQuestionColumns(dbInstance);
 
   return dbInstance;
 }
@@ -154,5 +173,23 @@ function migrateIngestJobColumns(db: DatabaseSync): void {
     db.exec(`
       ALTER TABLE ingest_jobs ADD COLUMN entry_id TEXT;
     `);
+  }
+}
+
+function migrateQuizQuestionColumns(db: DatabaseSync): void {
+  const columns = db.prepare('PRAGMA table_info(quiz_questions)').all() as Array<{ name: string }>;
+  const columnNames = new Set(columns.map((c) => c.name));
+
+  if (!columnNames.has('score_percentage')) {
+    db.exec(`ALTER TABLE quiz_questions ADD COLUMN score_percentage INTEGER DEFAULT 0;`);
+  }
+  if (!columnNames.has('what_was_good')) {
+    db.exec(`ALTER TABLE quiz_questions ADD COLUMN what_was_good TEXT;`);
+  }
+  if (!columnNames.has('what_was_missing')) {
+    db.exec(`ALTER TABLE quiz_questions ADD COLUMN what_was_missing TEXT;`);
+  }
+  if (!columnNames.has('misconceptions_feedback')) {
+    db.exec(`ALTER TABLE quiz_questions ADD COLUMN misconceptions_feedback TEXT;`);
   }
 }

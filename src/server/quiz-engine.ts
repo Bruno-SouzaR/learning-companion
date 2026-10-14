@@ -36,6 +36,21 @@ export interface QuizSession {
   createdAt: string;
 }
 
+export interface QuestionAttempt {
+  id: string;
+  questionId: string;
+  quizId: string;
+  studyEntryId: string;
+  attemptNumber: number;
+  userAnswer: string;
+  scorePercentage: number;
+  isCorrect: boolean;
+  whatWasGood: string;
+  whatWasMissing: string;
+  misconceptionsFeedback?: string;
+  createdAt: string;
+}
+
 export interface QuizEvaluationResult {
   quizId: string;
   score: number;
@@ -49,10 +64,23 @@ export interface QuizEvaluationResult {
     userAnswer: string;
     expectedAnswer: string;
     isCorrect: boolean;
+    scorePercentage: number;
+    whatWasGood: string;
+    whatWasMissing: string;
+    misconceptionsFeedback?: string;
     feedback: string;
   }>;
 }
 
+export const semanticEvaluationSchema = z.object({
+  score_percentage: z.number().min(0).max(100).describe('Pontuação percentual de 0 a 100 de precisão e completude conceitual'),
+  is_correct: z.boolean().describe('true se a resposta demonstrar domínio dos conceitos essenciais (score >= 70)'),
+  what_was_good: z.string().describe('O que o usuário explicou corretamente em português'),
+  what_was_missing: z.string().describe('O que faltou ou poderia ser melhor formulado em português'),
+  misconceptions_feedback: z.string().default('').describe('Esclarecimento didático caso o usuário tenha afirmado algo incorreto'),
+});
+
+export type SemanticEvaluation = z.infer<typeof semanticEvaluationSchema>;
 const quizGenerationSchema = z.object({
   questions: z.array(
     z.object({
@@ -204,47 +232,85 @@ export async function submitQuizAnswers(
     expected_answer: string;
     cloze_hint: string | null;
   }>;
-
   let score = 0;
   const sectionFailureCounts: Record<number, number> = {};
   const results: QuizEvaluationResult['results'] = [];
 
+  // Fetch study_entry_id for question_attempts records
+  const quizRow = db
+    .prepare('SELECT study_entry_id FROM study_quizzes WHERE id = ?')
+    .get(quizId) as { study_entry_id: string } | undefined;
+  const studyEntryId = quizRow?.study_entry_id || '';
+
   for (const q of questions) {
     const userAnswer = (answers[q.id] || '').trim();
-    let isCorrect = false;
+    const evaluation = await evaluateUserAnswer({
+      question: q.question,
+      expectedAnswer: q.expected_answer,
+      userAnswer,
+    });
 
-    if (userAnswer.length > 0) {
-      if (isExactMatch(q.expected_answer, userAnswer)) {
-        isCorrect = true;
-      } else {
-        // Evaluate key concepts overlap
-        const expectedWords = q.expected_answer
-          .toLowerCase()
-          .replace(/[.,!?;:]/g, '')
-          .split(/\s+/)
-          .filter((w) => w.length > 3);
-
-        const userLower = userAnswer.toLowerCase();
-        const matchedCount = expectedWords.filter((w) => userLower.includes(w)).length;
-        isCorrect = expectedWords.length > 0 && matchedCount / expectedWords.length >= 0.5;
-      }
-    }
-
-    if (isCorrect) {
+    if (evaluation.is_correct) {
       score += 1;
     } else {
       sectionFailureCounts[q.section_index] = (sectionFailureCounts[q.section_index] || 0) + 1;
     }
 
-    const feedback = isCorrect
-      ? 'Correto! Excelente retenção do conceito.'
-      : 'Incorreto ou incompleto. Revise o conceito esperado.';
+    const feedback = evaluation.what_was_good
+      ? evaluation.what_was_good
+      : evaluation.what_was_missing || 'Conceito avaliado.';
 
+    // Save or update latest question row
     db.prepare(`
       UPDATE quiz_questions
-      SET user_answer = ?, is_correct = ?, feedback = ?
+      SET user_answer = ?,
+          is_correct = ?,
+          score_percentage = ?,
+          what_was_good = ?,
+          what_was_missing = ?,
+          misconceptions_feedback = ?,
+          feedback = ?
       WHERE id = ?
-    `).run(userAnswer, isCorrect ? 1 : 0, feedback, q.id);
+    `).run(
+      userAnswer,
+      evaluation.is_correct ? 1 : 0,
+      evaluation.score_percentage,
+      evaluation.what_was_good,
+      evaluation.what_was_missing,
+      evaluation.misconceptions_feedback || '',
+      feedback,
+      q.id
+    );
+
+    // Record permanent attempt in question_attempts history timeline
+    if (userAnswer.length > 0) {
+      const prevAttempts = db
+        .prepare('SELECT COUNT(*) as count FROM question_attempts WHERE question_id = ?')
+        .get(q.id) as { count: number };
+      const attemptNumber = (prevAttempts?.count || 0) + 1;
+      const attemptId = `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const now = new Date().toISOString();
+
+      db.prepare(`
+        INSERT INTO question_attempts (
+          id, question_id, quiz_id, study_entry_id, attempt_number, user_answer,
+          score_percentage, is_correct, what_was_good, what_was_missing, misconceptions_feedback, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        attemptId,
+        q.id,
+        quizId,
+        studyEntryId,
+        attemptNumber,
+        userAnswer,
+        evaluation.score_percentage,
+        evaluation.is_correct ? 1 : 0,
+        evaluation.what_was_good,
+        evaluation.what_was_missing,
+        evaluation.misconceptions_feedback || '',
+        now
+      );
+    }
 
     results.push({
       questionId: q.id,
@@ -252,7 +318,11 @@ export async function submitQuizAnswers(
       question: q.question,
       userAnswer,
       expectedAnswer: q.expected_answer,
-      isCorrect,
+      isCorrect: evaluation.is_correct,
+      scorePercentage: evaluation.score_percentage,
+      whatWasGood: evaluation.what_was_good,
+      whatWasMissing: evaluation.what_was_missing,
+      misconceptionsFeedback: evaluation.misconceptions_feedback,
       feedback,
     });
   }
@@ -277,6 +347,237 @@ export async function submitQuizAnswers(
     weakSections,
     results,
   };
+}
+
+/**
+ * Evaluate a single user answer conceptually using LLM-as-a-judge with heuristic fallback.
+ */
+export async function evaluateUserAnswer(params: {
+  question: string;
+  expectedAnswer: string;
+  userAnswer: string;
+}): Promise<SemanticEvaluation> {
+  const trimmed = params.userAnswer.trim();
+  if (!trimmed) {
+    return {
+      score_percentage: 0,
+      is_correct: false,
+      what_was_good: '',
+      what_was_missing: 'Nenhuma resposta foi enviada. Revise a resposta esperada para consolidar o conceito.',
+      misconceptions_feedback: '',
+    };
+  }
+
+  if (isExactMatch(params.expectedAnswer, trimmed)) {
+    return {
+      score_percentage: 100,
+      is_correct: true,
+      what_was_good: 'Resposta exata e idêntica ao conceito esperado!',
+      what_was_missing: '',
+      misconceptions_feedback: '',
+    };
+  }
+
+  try {
+    const evaluation = await callLlmJson({
+      messages: [
+        {
+          role: 'system',
+          content: `You are a rigorous and encouraging Computer Science pedagogical evaluator.
+Analyze the student's answer against the expected answer for a study question.
+
+CRITICAL EVALUATION RULES:
+1. DO NOT require exact word-by-word matches. Evaluate whether the student conceptually understood the answer.
+2. If the user explained the underlying mechanism in their own words or with synonyms (even if informal), give generous credit (e.g. 70-100%).
+3. Award score_percentage from 0 to 100:
+   - 90-100%: Accurate and complete conceptual understanding.
+   - 70-89%: Core concept is correct, though minor terminology or precision could be improved.
+   - 40-69%: Partially correct, touched on the idea but missed the main mechanism.
+   - 0-39%: Incorrect, unrelated, or conceptually wrong.
+4. Set is_correct to true if score_percentage >= 70, otherwise false.
+5. Provide all feedback strictly in Brazilian Portuguese (PT-BR). NUNCA use espanhol.
+   - what_was_good: Explain in Portuguese what the student got right.
+   - what_was_missing: Explain constructively what could be improved or added.
+   - misconceptions_feedback: If the student stated something technically false, explain why it is wrong and clarify the true concept.`,
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            question: params.question,
+            expected_answer: params.expectedAnswer,
+            student_answer: trimmed,
+          }),
+        },
+      ],
+      schema: semanticEvaluationSchema,
+      temperature: 0.1,
+    });
+    if (evaluation && typeof evaluation.score_percentage === 'number') {
+      return evaluation;
+    }
+    throw new Error('Invalid evaluation payload');
+  } catch {
+    // Graceful fallback to keyword overlap if LLM is unreachable or in un-mocked unit tests
+    const expectedWords = params.expectedAnswer
+      .toLowerCase()
+      .replace(/[.,!?;:]/g, '')
+      .split(/\s+/)
+      .filter((w) => w.length > 3);
+    const userLower = trimmed.toLowerCase();
+    const matchedCount = expectedWords.filter((w) => userLower.includes(w)).length;
+    const ratio = expectedWords.length > 0 ? matchedCount / expectedWords.length : 0;
+    const score = Math.round(ratio * 100);
+    const isCorrect = score >= 50;
+
+    return {
+      score_percentage: isCorrect ? Math.max(70, score) : score,
+      is_correct: isCorrect,
+      what_was_good: isCorrect ? 'Você cobriu conceitos fundamentais da resposta esperada.' : '',
+      what_was_missing: isCorrect ? '' : 'Faltaram conceitos essenciais da resposta esperada.',
+      misconceptions_feedback: '',
+    };
+  }
+}
+
+/**
+ * Evaluate an individual question attempt (e.g. retry from Caderno timeline) and record in history.
+ */
+export async function evaluateSingleQuestionAttempt(params: {
+  questionId: string;
+  userAnswer: string;
+}): Promise<QuestionAttempt> {
+  const db = getDb();
+  const q = db
+    .prepare(`
+      SELECT qq.id, qq.quiz_id, qq.question, qq.expected_answer, qq.section_index, sq.study_entry_id
+      FROM quiz_questions qq
+      JOIN study_quizzes sq ON qq.quiz_id = sq.id
+      WHERE qq.id = ?
+    `)
+    .get(params.questionId) as {
+      id: string;
+      quiz_id: string;
+      question: string;
+      expected_answer: string;
+      section_index: number;
+      study_entry_id: string;
+    } | undefined;
+
+  if (!q) {
+    throw new Error(`Question ${params.questionId} not found`);
+  }
+
+  const evaluation = await evaluateUserAnswer({
+    question: q.question,
+    expectedAnswer: q.expected_answer,
+    userAnswer: params.userAnswer,
+  });
+
+  const prevAttempts = db
+    .prepare('SELECT COUNT(*) as count FROM question_attempts WHERE question_id = ?')
+    .get(q.id) as { count: number };
+  const attemptNumber = (prevAttempts?.count || 0) + 1;
+
+  const attemptId = `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO question_attempts (
+      id, question_id, quiz_id, study_entry_id, attempt_number, user_answer,
+      score_percentage, is_correct, what_was_good, what_was_missing, misconceptions_feedback, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    attemptId,
+    q.id,
+    q.quiz_id,
+    q.study_entry_id,
+    attemptNumber,
+    params.userAnswer.trim(),
+    evaluation.score_percentage,
+    evaluation.is_correct ? 1 : 0,
+    evaluation.what_was_good,
+    evaluation.what_was_missing,
+    evaluation.misconceptions_feedback || '',
+    now
+  );
+
+  const feedback = evaluation.what_was_good
+    ? evaluation.what_was_good
+    : evaluation.what_was_missing || 'Avaliação registrada.';
+
+  db.prepare(`
+    UPDATE quiz_questions
+    SET user_answer = ?,
+        is_correct = ?,
+        score_percentage = ?,
+        what_was_good = ?,
+        what_was_missing = ?,
+        misconceptions_feedback = ?,
+        feedback = ?
+    WHERE id = ?
+  `).run(
+    params.userAnswer.trim(),
+    evaluation.is_correct ? 1 : 0,
+    evaluation.score_percentage,
+    evaluation.what_was_good,
+    evaluation.what_was_missing,
+    evaluation.misconceptions_feedback || '',
+    feedback,
+    q.id
+  );
+
+  return {
+    id: attemptId,
+    questionId: q.id,
+    quizId: q.quiz_id,
+    studyEntryId: q.study_entry_id,
+    attemptNumber,
+    userAnswer: params.userAnswer.trim(),
+    scorePercentage: evaluation.score_percentage,
+    isCorrect: evaluation.is_correct,
+    whatWasGood: evaluation.what_was_good,
+    whatWasMissing: evaluation.what_was_missing,
+    misconceptionsFeedback: evaluation.misconceptions_feedback || '',
+    createdAt: now,
+  };
+}
+
+/**
+ * Get full chronological attempt history for a specific question.
+ */
+export function getQuestionAttempts(questionId: string): QuestionAttempt[] {
+  const db = getDb();
+  const rows = db
+    .prepare('SELECT * FROM question_attempts WHERE question_id = ? ORDER BY attempt_number ASC')
+    .all(questionId) as Array<{
+      id: string;
+      question_id: string;
+      quiz_id: string;
+      study_entry_id: string;
+      attempt_number: number;
+      user_answer: string;
+      score_percentage: number;
+      is_correct: number;
+      what_was_good: string | null;
+      what_was_missing: string | null;
+      misconceptions_feedback: string | null;
+      created_at: string;
+    }>;
+
+  return rows.map((r) => ({
+    id: r.id,
+    questionId: r.question_id,
+    quizId: r.quiz_id,
+    studyEntryId: r.study_entry_id,
+    attemptNumber: r.attempt_number,
+    userAnswer: r.user_answer,
+    scorePercentage: r.score_percentage,
+    isCorrect: Boolean(r.is_correct),
+    whatWasGood: r.what_was_good || '',
+    whatWasMissing: r.what_was_missing || '',
+    misconceptionsFeedback: r.misconceptions_feedback || '',
+    createdAt: r.created_at,
+  }));
 }
 
 /**

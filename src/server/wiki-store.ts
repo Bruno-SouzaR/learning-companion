@@ -18,12 +18,31 @@ export interface WikiEntryFrontmatter {
   target_en?: string;
 }
 
+export interface QuestionAttemptView {
+  id: string;
+  attemptNumber: number;
+  userAnswer: string;
+  scorePercentage: number;
+  isCorrect: boolean;
+  whatWasGood: string;
+  whatWasMissing: string;
+  misconceptionsFeedback?: string;
+  createdAt: string;
+}
+
 export interface StudyQuestion {
   id: string;
   sectionIndex: number;
   question: string;
   expectedAnswer: string;
   clozeHint?: string;
+  userAnswer?: string;
+  isCorrect?: boolean;
+  scorePercentage?: number;
+  whatWasGood?: string;
+  whatWasMissing?: string;
+  misconceptionsFeedback?: string;
+  attempts: QuestionAttemptView[];
 }
 
 export interface StoredEntry {
@@ -58,7 +77,8 @@ function attachQuestionsToEntry(entry: StoredEntry): StoredEntry {
     if (quizRow) {
       const questions = db
         .prepare(`
-          SELECT id, section_index, question, expected_answer, cloze_hint
+          SELECT id, section_index, question, expected_answer, cloze_hint,
+                 user_answer, is_correct, score_percentage, what_was_good, what_was_missing, misconceptions_feedback
           FROM quiz_questions
           WHERE quiz_id = ?
           ORDER BY section_index ASC
@@ -69,15 +89,72 @@ function attachQuestionsToEntry(entry: StoredEntry): StoredEntry {
           question: string;
           expected_answer: string;
           cloze_hint: string | null;
+          user_answer: string | null;
+          is_correct: number | null;
+          score_percentage: number | null;
+          what_was_good: string | null;
+          what_was_missing: string | null;
+          misconceptions_feedback: string | null;
         }>;
 
-      entry.questions = questions.map((q) => ({
-        id: q.id,
-        sectionIndex: q.section_index,
-        question: q.question,
-        expectedAnswer: q.expected_answer,
-        clozeHint: q.cloze_hint || undefined,
-      }));
+      const attemptRows = db
+        .prepare(`
+          SELECT id, question_id, attempt_number, user_answer, score_percentage, is_correct,
+                 what_was_good, what_was_missing, misconceptions_feedback, created_at
+          FROM question_attempts
+          WHERE quiz_id = ?
+          ORDER BY attempt_number ASC
+        `)
+        .all(quizRow.id) as Array<{
+          id: string;
+          question_id: string;
+          attempt_number: number;
+          user_answer: string;
+          score_percentage: number;
+          is_correct: number;
+          what_was_good: string | null;
+          what_was_missing: string | null;
+          misconceptions_feedback: string | null;
+          created_at: string;
+        }>;
+
+      const attemptsByQuestion: Record<string, QuestionAttemptView[]> = {};
+      for (const att of attemptRows) {
+        if (!attemptsByQuestion[att.question_id]) {
+          attemptsByQuestion[att.question_id] = [];
+        }
+        attemptsByQuestion[att.question_id].push({
+          id: att.id,
+          attemptNumber: att.attempt_number,
+          userAnswer: att.user_answer,
+          scorePercentage: att.score_percentage,
+          isCorrect: Boolean(att.is_correct),
+          whatWasGood: att.what_was_good || '',
+          whatWasMissing: att.what_was_missing || '',
+          misconceptionsFeedback: att.misconceptions_feedback || undefined,
+          createdAt: att.created_at,
+        });
+      }
+
+      entry.questions = questions.map((q) => {
+        const qAttempts = attemptsByQuestion[q.id] || [];
+        const latestAttempt = qAttempts.slice(-1)[0];
+
+        return {
+          id: q.id,
+          sectionIndex: q.section_index,
+          question: q.question,
+          expectedAnswer: q.expected_answer,
+          clozeHint: q.cloze_hint || undefined,
+          userAnswer: latestAttempt ? latestAttempt.userAnswer : (q.user_answer || undefined),
+          isCorrect: latestAttempt ? latestAttempt.isCorrect : (q.is_correct !== null ? Boolean(q.is_correct) : undefined),
+          scorePercentage: latestAttempt ? latestAttempt.scorePercentage : (q.score_percentage ?? undefined),
+          whatWasGood: latestAttempt ? latestAttempt.whatWasGood : (q.what_was_good || undefined),
+          whatWasMissing: latestAttempt ? latestAttempt.whatWasMissing : (q.what_was_missing || undefined),
+          misconceptionsFeedback: latestAttempt ? latestAttempt.misconceptionsFeedback : (q.misconceptions_feedback || undefined),
+          attempts: qAttempts,
+        };
+      });
     }
   } catch (err) {
     console.error('Failed to attach questions to study entry:', entry.id, err);

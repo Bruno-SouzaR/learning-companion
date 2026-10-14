@@ -185,7 +185,7 @@ export async function callLlmMarkdown(params: {
         {
           role: 'user' as const,
           content:
-            'Continúa exactamente donde te quedaste, sin repetir contenido y manteniendo el formato, hasta completar la sección.',
+            'Continue exactly from where you left off, without repeating previous content and maintaining the formatting, until the section is fully completed. Write strictly in Brazilian Portuguese.',
         },
       ];
       continue;

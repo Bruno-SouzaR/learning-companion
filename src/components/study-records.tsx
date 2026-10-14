@@ -15,9 +15,14 @@ import {
   Folder,
   FolderOpen,
   Layers,
+  History,
+  Send,
+  CheckCircle2,
+  AlertCircle,
+  RotateCcw,
 } from 'lucide-react';
 import { MarkdownView } from './markdown-view';
-import type { StoredEntry } from '@/server/wiki-store';
+import type { StoredEntry, QuestionAttemptView } from '@/server/wiki-store';
 
 export function StudyRecords() {
   const [query, setQuery] = useState('');
@@ -27,7 +32,62 @@ export function StudyRecords() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [expandedConcepts, setExpandedConcepts] = useState<Record<string, boolean>>({});
+  const [retryAnswers, setRetryAnswers] = useState<Record<string, string>>({});
+  const [isRetrying, setIsRetrying] = useState<Record<string, boolean>>({});
+  const [retryError, setRetryError] = useState<Record<string, string>>({});
+  const [expandedTimelines, setExpandedTimelines] = useState<Record<string, boolean>>({});
 
+  const handleRetryQuestion = async (questionId: string) => {
+    const text = (retryAnswers[questionId] || '').trim();
+    if (!text) return;
+
+    setIsRetrying((prev) => ({ ...prev, [questionId]: true }));
+    setRetryError((prev) => ({ ...prev, [questionId]: '' }));
+
+    try {
+      const res = await fetch('/api/study/quiz/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questionId, userAnswer: text }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success || !json.data) {
+        throw new Error(json.error || 'Falha ao avaliar nova tentativa');
+      }
+
+      const newAttempt: QuestionAttemptView = json.data;
+
+      setEntries((prevEntries) =>
+        prevEntries.map((entry) => {
+          if (!entry.questions) return entry;
+          return {
+            ...entry,
+            questions: entry.questions.map((q) => {
+              if (q.id !== questionId) return q;
+              const updatedAttempts = [...(q.attempts || []), newAttempt];
+              return {
+                ...q,
+                userAnswer: newAttempt.userAnswer,
+                isCorrect: newAttempt.isCorrect,
+                scorePercentage: newAttempt.scorePercentage,
+                whatWasGood: newAttempt.whatWasGood,
+                whatWasMissing: newAttempt.whatWasMissing,
+                misconceptionsFeedback: newAttempt.misconceptionsFeedback,
+                attempts: updatedAttempts,
+              };
+            }),
+          };
+        })
+      );
+
+      setRetryAnswers((prev) => ({ ...prev, [questionId]: '' }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao submeter tentativa';
+      setRetryError((prev) => ({ ...prev, [questionId]: msg }));
+    } finally {
+      setIsRetrying((prev) => ({ ...prev, [questionId]: false }));
+    }
+  };
   const fetchEntries = useCallback(async (searchQuery: string) => {
     setIsLoading(true);
     try {
@@ -314,22 +374,166 @@ export function StudyRecords() {
                           {expandedConcepts[`questoes-${entry.id}`] && (
                             <div className="p-4 space-y-2.5">
                               {entry.questions.map((q, qi) => (
-                                <div key={q.id} className="p-3 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1.5">
+                                <div key={q.id} className="p-3.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-2.5">
+                                  {/* Header with question number and score badge */}
                                   <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/60">
-                                      Question {qi + 1}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 font-mono">Seção {q.sectionIndex}</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/60">
+                                        Questão {qi + 1}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400 font-mono">Seção {q.sectionIndex}</span>
+                                    </div>
+
+                                    {q.scorePercentage !== undefined && (
+                                      <span
+                                        className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded border ${
+                                          q.scorePercentage >= 70
+                                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60'
+                                            : q.scorePercentage >= 40
+                                            ? 'bg-amber-950/80 text-amber-300 border-amber-800/60'
+                                            : 'bg-rose-950/80 text-rose-300 border-rose-800/60'
+                                        }`}
+                                      >
+                                        {q.scorePercentage}% precisão
+                                      </span>
+                                    )}
                                   </div>
-                                  <p className="text-xs font-medium text-slate-100">{q.question}</p>
-                                  <p className="text-[11px] text-slate-400">
-                                    <strong className="text-emerald-400">Resposta Esperada:</strong> {q.expectedAnswer}
-                                  </p>
-                                  {q.clozeHint && (
-                                    <span className="inline-block text-[11px] font-mono text-indigo-300 bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-900/60">
-                                      Lacuna: {q.clozeHint}
-                                    </span>
+
+                                  <p className="text-xs sm:text-sm font-semibold text-slate-100">{q.question}</p>
+
+                                  {/* Official Expected Answer */}
+                                  <div className="text-[11px] text-slate-300 bg-slate-900/60 p-2.5 rounded-md border border-slate-800/80">
+                                    <strong className="text-emerald-400 block mb-0.5">Resposta Esperada Oficial:</strong>
+                                    <p className="text-slate-200">{q.expectedAnswer}</p>
+                                    {q.clozeHint && (
+                                      <span className="inline-block mt-1.5 text-[10px] font-mono text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-900/60">
+                                        Lacuna: {q.clozeHint}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Timeline of Attempts */}
+                                  {q.attempts && q.attempts.length > 0 && (
+                                    <div className="pt-2 border-t border-slate-800/60 space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                          <History className="w-3.5 h-3.5 text-indigo-400" />
+                                          Histórico de Tentativas ({q.attempts.length})
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setExpandedTimelines((prev) => ({ ...prev, [q.id]: !prev[q.id] }))}
+                                          className="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer flex items-center gap-0.5"
+                                        >
+                                          {expandedTimelines[q.id] ? (
+                                            <>
+                                              <span>Recolher</span>
+                                              <ChevronUp className="w-3 h-3" />
+                                            </>
+                                          ) : (
+                                            <>
+                                              <span>Ver Todas ({q.attempts.length})</span>
+                                              <ChevronDown className="w-3 h-3" />
+                                            </>
+                                          )}
+                                        </button>
+                                      </div>
+
+                                      <div className="space-y-2">
+                                        {(expandedTimelines[q.id] ? q.attempts : q.attempts.slice(-1)).map((att) => (
+                                          <div
+                                            key={att.id}
+                                            className={`p-2.5 rounded-lg border text-xs space-y-1.5 ${
+                                              att.isCorrect
+                                                ? 'bg-emerald-950/20 border-emerald-900/40'
+                                                : 'bg-slate-900/40 border-slate-800'
+                                            }`}
+                                          >
+                                            <div className="flex items-center justify-between">
+                                              <span className="font-semibold text-slate-300">
+                                                Tentativa #{att.attemptNumber}
+                                              </span>
+                                              <span
+                                                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                                                  att.scorePercentage >= 70
+                                                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60'
+                                                    : att.scorePercentage >= 40
+                                                    ? 'bg-amber-950/80 text-amber-300 border-amber-800/60'
+                                                    : 'bg-rose-950/80 text-rose-300 border-rose-800/60'
+                                                }`}
+                                              >
+                                                {att.scorePercentage}% precisão
+                                              </span>
+                                            </div>
+
+                                            <p className="text-slate-200 italic bg-slate-950/60 p-2 rounded border border-slate-800/40">
+                                              "{att.userAnswer}"
+                                            </p>
+
+                                            {att.whatWasGood ? (
+                                              <div className="text-[11px] text-emerald-300 flex items-start gap-1.5">
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                                                <span>{att.whatWasGood}</span>
+                                              </div>
+                                            ) : null}
+
+                                            {att.whatWasMissing ? (
+                                              <div className="text-[11px] text-amber-300 flex items-start gap-1.5">
+                                                <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                                <span>{att.whatWasMissing}</span>
+                                              </div>
+                                            ) : null}
+
+                                            {att.misconceptionsFeedback ? (
+                                              <div className="text-[11px] text-rose-300 flex items-start gap-1.5">
+                                                <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                                                <span>{att.misconceptionsFeedback}</span>
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
                                   )}
+
+                                  {/* Retry / Refine Form */}
+                                  <div className="pt-2 border-t border-slate-800/60 space-y-1.5">
+                                    <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                                      <RotateCcw className="w-3 h-3 text-indigo-400" />
+                                      Tentar Novamente / Refinar com suas palavras:
+                                    </span>
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                      <textarea
+                                        rows={2}
+                                        value={retryAnswers[q.id] || ''}
+                                        onChange={(e) => setRetryAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                                        placeholder="Digite sua resposta aqui para avaliar a proximidade conceitual..."
+                                        disabled={isRetrying[q.id]}
+                                        className="flex-1 bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRetryQuestion(q.id)}
+                                        disabled={isRetrying[q.id] || !(retryAnswers[q.id] || '').trim()}
+                                        className="self-end sm:self-auto px-3.5 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                                      >
+                                        {isRetrying[q.id] ? (
+                                          <>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            <span>Avaliando...</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span>Enviar Tentativa</span>
+                                            <Send className="w-3 h-3" />
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
+                                    {retryError[q.id] && (
+                                      <span className="text-[10px] text-rose-400 block">{retryError[q.id]}</span>
+                                    )}
+                                  </div>
                                 </div>
                               ))}
                             </div>

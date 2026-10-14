@@ -1,5 +1,5 @@
 import { callLlmMarkdown } from './llm';
-
+import { sanitizePortugueseMarkdown } from './markdown-sanitizer';
 export interface ParsedSection {
   sectionTitle: string;
   keyPoints: string[];
@@ -20,7 +20,7 @@ export function parseSectionMarkdown(candidate: string): ParsedSection {
   }
 
   const lines = text.split('\n');
-  const DEFAULT_TITLE = 'Sección sin título';
+  const DEFAULT_TITLE = 'Seção sem título';
   let sectionTitle = DEFAULT_TITLE;
   let keyPoints: string[] = [];
   let body: string[] = [];
@@ -99,23 +99,31 @@ export function parseSectionMarkdown(candidate: string): ParsedSection {
   };
 }
 
-export const SECTION_STANDARDS_PROMPT = `You are an academic professor authoring a high-level textbook chapter.
-Produce a deep, structured chapter in Portuguese with EXHAUSTIVE depth and ZERO omissions.
-RULES:
-1. NO META-COMMENTARY: never write "o autor lista", "el documento enumera", "inventario técnico" or any process description.
-2. STRUCTURE (mandatory skeleton; create as many subtopic sections "### Subtema" as the source requires):
-   - Start with a heading: # Título de la Sección
+export const SECTION_STANDARDS_PROMPT = `You are an academic professor and author of high-level textbook chapters in Computer Science and Software Engineering.
+Your mission is to synthesize study materials into deep, structured, highly pedagogical Markdown in Brazilian Portuguese (PT-BR) with EXHAUSTIVE depth and ZERO omissions.
+
+RULES & CONSTRAINTS:
+1. NO META-COMMENTARY: never write "o autor lista", "o documento enumera", "inventário técnico" or any process description.
+2. STRICT BRAZILIAN PORTUGUESE (PT-BR): Write all content, headings, explanations, and tables strictly in Brazilian Portuguese.
+   NEVER leak Spanish terms or cognates. Specifically:
+   - Use "Definição Teórica" (NEVER "Definición Teórica").
+   - Use "Mecanismo & Aplicação Prática" (NEVER "Mecanismo & Aplicación Práctica").
+   - Use "Exemplo Prático" or "Nota de Código" (NEVER "Ejemplo Práctico").
+   - Use "Vantagens" and "Desvantagens" in tables (NEVER "Ventajas" or "Desventajas").
+   - Use "Seção" (NEVER "Sección").
+3. STRUCTURE (mandatory skeleton; create as many subtopic sections "### Subtema" as the source requires):
+   - Start with a heading: # Título da Seção
    - Then a list block titled exactly: ### Pontos Nucleares
-     containing physical bullets "-" with the most important concepts
-   - Then subtopic blocks for EVERY distinct concept/item of the source:
-     ### [Nombre del concepto]
-     - **Definición Teórica:** exact, concise, no filler
-     - **Mecanismo & Aplicación Práctica:** how it works internally
-     - **Ejemplo Práctico** or **Nota de Código:** a concrete engineering scenario, with a closed code block ONLY if the source uses code
+     containing physical bullets "-" with the 5 to 8 most important concepts
+   - Then subtopic blocks for EVERY distinct concept/item from the source:
+     ### [Nome do Conceito]
+     - **Definição Teórica:** exact, concise, no filler
+     - **Mecanismo & Aplicação Prática:** how it works internally
+     - **Exemplo Prático** or **Nota de Código:** a concrete engineering scenario, with a closed code block ONLY if the source uses code
      - Separation between items using blank lines
-   - If the source compares mechanisms, include a markdown table "| Mecanismo | Ventajas | Desventajas |".
-3. CODE BLOCKS MUST always be closed with three backticks; never inline backticks colocated with text.
-4. NEVER merge, group, or skip any item listed by the source. Expand ALL of them.`;
+   - If the source compares mechanisms, include a markdown table "| Mecanismo | Vantagens | Desvantagens |".
+4. CODE BLOCKS MUST always be closed with three backticks; never inline backticks colocated with text.
+5. NEVER merge, group, or skip any item listed by the source. Expand ALL of them.`;
 
 /**
  * Synthesize one section of a study document as pure Markdown, extending
@@ -144,8 +152,12 @@ export async function synthesizeSection(params: {
   });
 
   const parsed = parseSectionMarkdown(rawMarkdown);
-  if (!parsed.sectionTitle || parsed.sectionTitle.startsWith('Sección sin')) {
-    parsed.sectionTitle = `Sección ${params.sectionIndex}`;
+  parsed.markdown = sanitizePortugueseMarkdown(parsed.markdown);
+  parsed.keyPoints = parsed.keyPoints.map(sanitizePortugueseMarkdown);
+  if (!parsed.sectionTitle || parsed.sectionTitle.startsWith('Seção sem') || parsed.sectionTitle.startsWith('Sección sin')) {
+    parsed.sectionTitle = `Seção ${params.sectionIndex}`;
+  } else {
+    parsed.sectionTitle = sanitizePortugueseMarkdown(parsed.sectionTitle);
   }
   return parsed;
 }
