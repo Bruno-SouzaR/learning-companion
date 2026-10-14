@@ -4,14 +4,14 @@ import { getEnv } from './env';
 export const refineResultSchema = z.object({
   title: z.string().describe('Short descriptive title in Portuguese for this practice entry'),
   target_english: z.string().describe('Natural, idiomatic English translation'),
-  mistakes_summary: z.array(z.string()).describe('2-3 concise bullet points in Portuguese explaining grammar, prepositions, or vocabulary mistakes'),
+  mistakes_summary: z.array(z.string()).default([]).describe('2-3 concise bullet points in Portuguese explaining grammar, prepositions, or vocabulary mistakes'),
   key_vocabulary: z.array(
     z.object({
       term: z.string().describe('Phrasal verb, collocation, or key word'),
       definition: z.string().describe('Portuguese definition and meaning'),
     })
-  ).describe('Key vocabulary terms and their Portuguese definitions'),
-  tags: z.array(z.string()).describe('Topic and error category tags'),
+  ).default([]).describe('Key vocabulary terms and their Portuguese definitions'),
+  tags: z.array(z.string()).default([]).describe('Topic and error category tags'),
 });
 
 export type RefineResult = z.infer<typeof refineResultSchema>;
@@ -37,6 +37,7 @@ You MUST respond with a valid JSON object strictly matching this schema:
 Guidelines:
 - Make target_english sound natural and fluent, preserving the user's original intent and tone.
 - In mistakes_summary, be direct, encouraging, and explain the "why" in Portuguese (e.g., prepositions, false friends, word order).
+- You MUST include all keys in the JSON object: "title", "target_english", "mistakes_summary", "key_vocabulary", and "tags".
 - Output ONLY pure JSON. No markdown backticks, no conversational preamble.`;
 
 export interface LlmResponse {
