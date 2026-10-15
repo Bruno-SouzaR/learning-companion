@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  CornerDownRight,
 } from 'lucide-react';
 import { MarkdownView } from './markdown-view';
 import { ActiveStatusBar } from './active-status-bar';
@@ -356,6 +357,107 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngest
     }));
   }
 
+  function handleJumpToConcept(sectionIndex: number, bulletText: string, bulletIdx: number) {
+    // If section is collapsed, auto-expand it first so elements exist in DOM
+    if (collapsedSectionIndices[sectionIndex]) {
+      setCollapsedSectionIndices((prev) => ({
+        ...prev,
+        [sectionIndex]: false,
+      }));
+    }
+
+    setTimeout(() => {
+      const sectionArticle = document.getElementById(`section-article-${sectionIndex}`);
+      if (!sectionArticle) return;
+
+      const headings = Array.from(sectionArticle.querySelectorAll<HTMLElement>('.heading-anchor, h3, h4'));
+      if (headings.length === 0) return;
+
+      const normalize = (s: string) =>
+        s
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9\s]/g, ' ');
+
+      const stopWords = new Set([
+        'para', 'como', 'onde', 'quando', 'qual', 'pelo', 'pela', 'pelos', 'pelas',
+        'mais', 'menos', 'muito', 'cada', 'todo', 'toda', 'todos', 'todas',
+        'esse', 'essa', 'esses', 'essas', 'este', 'esta', 'estes', 'estas',
+        'isso', 'isto', 'aquilo', 'sobre', 'entre', 'atraves', 'sendo', 'estao',
+        'podem', 'deve', 'devem', 'forma', 'sistema', 'sistemas', 'arquivo', 'arquivos',
+        'definicao', 'teorica', 'mecanismo', 'aplicacao', 'pratica', 'exemplo'
+      ]);
+
+      const rawWords = normalize(bulletText).split(/\s+/).filter((w) => w.length >= 4 && !stopWords.has(w));
+
+      let bestMatch: HTMLElement | null = null;
+      let highestScore = 0;
+
+      for (const h of headings) {
+        const hText = normalize(h.innerText || h.textContent || '');
+        let score = 0;
+
+        for (const word of rawWords) {
+          if (hText.includes(word)) {
+            score += 4;
+          }
+        }
+
+        const nextElem = h.nextElementSibling as HTMLElement | null;
+        if (nextElem && score > 0) {
+          const nextText = normalize(nextElem.innerText || '');
+          for (const word of rawWords) {
+            if (nextText.includes(word)) {
+              score += 1;
+            }
+          }
+        }
+
+        if (score > highestScore) {
+          highestScore = score;
+          bestMatch = h;
+        }
+      }
+
+      if (!bestMatch || highestScore < 4) {
+        const h3s = headings.filter((h) => h.tagName.toLowerCase() === 'h3');
+        if (h3s.length > 0) {
+          const fallbackIdx = Math.min(bulletIdx, h3s.length - 1);
+          bestMatch = h3s[fallbackIdx];
+        } else {
+          bestMatch = headings[0];
+        }
+      }
+
+      if (bestMatch) {
+        bestMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        bestMatch.classList.add(
+          'ring-2',
+          'ring-indigo-400',
+          'bg-indigo-950/60',
+          'px-2.5',
+          'py-1.5',
+          'rounded-lg',
+          'shadow-lg',
+          'shadow-indigo-950/50'
+        );
+        setTimeout(() => {
+          bestMatch?.classList.remove(
+            'ring-2',
+            'ring-indigo-400',
+            'bg-indigo-950/60',
+            'px-2.5',
+            'py-1.5',
+            'rounded-lg',
+            'shadow-lg',
+            'shadow-indigo-950/50'
+          );
+        }, 2500);
+      }
+    }, 60);
+  }
+
   async function handleSubmitQuiz(e: React.FormEvent) {
     e.preventDefault();
     if (!quizSession) return;
@@ -556,6 +658,7 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngest
               return (
                 <article
                   key={sec.sectionIndex}
+                  id={`section-article-${sec.sectionIndex}`}
                   className="p-5 md:p-6 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 shadow-sm transition-all"
                 >
                   <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
@@ -584,14 +687,27 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngest
                     <>
                       {sec.keyPoints && sec.keyPoints.length > 0 && (
                         <div className="bg-slate-900/70 p-4 sm:p-5 rounded-xl border border-slate-800/80 space-y-2.5">
-                          <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                            Pontos Nucleares da Seção:
-                          </span>
-                          <ul className="text-sm sm:text-[15px] text-slate-200 space-y-2.5 pl-5 list-disc marker:text-indigo-400 leading-relaxed">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                              Pontos Nucleares da Seção:
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-normal lowercase hidden sm:inline">
+                              (clique para saltar ao conceito)
+                            </span>
+                          </div>
+                          <ul className="text-sm sm:text-[15px] text-slate-200 space-y-1.5 pl-1 list-none leading-relaxed">
                             {sec.keyPoints.map((kp, kIdx) => (
-                              <li key={kIdx} className="pl-1">
-                                {kp}
+                              <li key={kIdx}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleJumpToConcept(sec.sectionIndex, kp, kIdx)}
+                                  className="w-full text-left flex items-start gap-2.5 py-1.5 px-2 rounded-lg text-slate-200 hover:text-indigo-200 hover:bg-indigo-950/40 transition-all cursor-pointer group"
+                                  title="Clique para centralizar a explicação deste conceito na tela"
+                                >
+                                  <CornerDownRight className="w-4 h-4 text-indigo-400 mt-0.5 shrink-0 opacity-50 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                                  <span>{kp}</span>
+                                </button>
                               </li>
                             ))}
                           </ul>

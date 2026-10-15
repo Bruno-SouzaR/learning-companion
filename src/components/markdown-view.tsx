@@ -5,6 +5,17 @@ interface MarkdownViewProps {
   content: string;
   className?: string;
 }
+const headingRenderer = new marked.Renderer();
+headingRenderer.heading = function ({ depth, text }) {
+  const cleanText = text.replace(/<[^>]+>/g, '').trim();
+  const slug = cleanText
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+  return `<h${depth} id="${slug}" class="heading-anchor scroll-mt-24 transition-all duration-500">${text}</h${depth}>\n`;
+};
 
 /**
  * Configure marked renderer options for secure, well-structured output.
@@ -12,8 +23,8 @@ interface MarkdownViewProps {
 marked.setOptions({
   gfm: true,
   breaks: true,
+  renderer: headingRenderer,
 });
-
 /**
  * Renders Markdown strings with technical aesthetic, syntax-highlight-friendly
  * code styling, and native tables matching the dark OLED design system.

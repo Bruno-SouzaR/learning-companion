@@ -102,7 +102,7 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<ExtractedDocum
  */
 export function chunkTextBySections(
   text: string,
-  maxTokensPerChunk = 4000,
+  maxTokensPerChunk = 3500,
   overlapTokens = 200
 ): DocumentChunk[] {
   const cleaned = cleanExtractedText(text);
