@@ -61,16 +61,29 @@ function show_help() {
 }
 
 function show_status() {
+  local port=8085
+  if [[ -f "$ENV_FILE" ]]; then
+    local p=$(grep "^LLM_BASE_URL=" "$ENV_FILE" | grep -o ':[0-9]\+' | tr -d ':')
+    if [[ -n "$p" ]]; then port="$p"; fi
+  fi
+
   echo "=== Current LLM Service Status ==="
-  if curl -s http://127.0.0.1:8080/health > /dev/null 2>&1; then
-    local models_info=$(curl -s http://127.0.0.1:8080/v1/models)
+  if curl -s "http://127.0.0.1:${port}/health" > /dev/null 2>&1; then
+    local models_info=$(curl -s "http://127.0.0.1:${port}/v1/models")
+    local active_model=$(python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('data', [{}])[0].get('id', data.get('models', [{}])[0].get('name', 'unknown')))" <<< "$models_info" 2>/dev/null || echo "unknown")
+    local ctx=$(python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('data', [{}])[0].get('meta', {}).get('n_ctx', 'unknown'))" <<< "$models_info" 2>/dev/null || echo "unknown")
+    echo "  Status:  ACTIVE (http://127.0.0.1:${port})"
+    echo "  Model:   $active_model"
+    echo "  Context: $ctx tokens"
+  elif curl -s "http://127.0.0.1:8080/health" > /dev/null 2>&1; then
+    local models_info=$(curl -s "http://127.0.0.1:8080/v1/models")
     local active_model=$(python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('data', [{}])[0].get('id', data.get('models', [{}])[0].get('name', 'unknown')))" <<< "$models_info" 2>/dev/null || echo "unknown")
     local ctx=$(python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('data', [{}])[0].get('meta', {}).get('n_ctx', 'unknown'))" <<< "$models_info" 2>/dev/null || echo "unknown")
     echo "  Status:  ACTIVE (http://127.0.0.1:8080)"
     echo "  Model:   $active_model"
     echo "  Context: $ctx tokens"
   else
-    echo "  Status:  INACTIVE (port 8080 unreachable)"
+    echo "  Status:  INACTIVE (port ${port} and 8080 unreachable)"
   fi
 
   if [[ -f "$ENV_FILE" ]]; then
