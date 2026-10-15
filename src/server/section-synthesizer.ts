@@ -134,9 +134,9 @@ RULES & CONSTRAINTS:
    - "Referências Bibliográficas" / "Bibliografia" / "Explore+" / "Saiba Mais" / "Fontes"
    Do NOT create subtopics, definitions, or analyses for textbook test questions.
    Focus EXCLUSIVELY on core technical theory, architecture, engineering mechanisms, and real commands.
-7. STRICT TITLE RULE (NO GENERIC HEADINGS):
-   NEVER create generic titles like "Sistema de Arquivos", "Introdução", "Conceitos Fundamentais", "Resumo", "Visão Geral", "Pontos Principais", "Análise Técnica" or "Seção X".
-   The main section heading (#) and all subheadings (###) MUST explicitly state the specific technology, data structure, algorithm, Linux command, or architectural mechanism discussed in the chunk (e.g. "# Alocação por I-nodes e Ponteiros Indiretos no ext2", "# Gerenciamento de Espaço Livre e Mapas de Bits", "# Políticas de Cache e Journaling").`;
+7. STRICT TECHNICAL TITLE RULE (FORBID GENERIC HEADINGS):
+   NEVER create generic titles such as "Sistema de Arquivos", "Introdução", "Conceitos Fundamentais", "Resumo", "Visão Geral", "Pontos Principais", "Análise Técnica", or "Seção X".
+   The main section heading (#) and all subheadings (###) MUST be in Portuguese and MUST explicitly state the specific technology, data structure, algorithm, Linux command, or architectural mechanism covered in this chunk (e.g., "# Alocação por I-nodes e Ponteiros Indiretos no ext2", "# Gerenciamento de Espaço Livre com Mapas de Bits", "# Políticas de Cache e Journaling").`;
 
 /**
  * Synthesize one section of a study document as pure Markdown, extending
@@ -153,9 +153,9 @@ export async function synthesizeSection(params: {
     messages: [
       {
         role: 'system',
-        content: `${SECTION_STANDARDS_PROMPT}\nDocumento: "${params.title}" (Tema: ${params.topic}). Processando ${
+        content: `${SECTION_STANDARDS_PROMPT}\nTarget Document: "${params.title}" (Topic: ${params.topic}). Processing Section ${
           params.sectionIndex
-        } de ${params.totalSections}.`,
+        } of ${params.totalSections}. Output all content strictly in Brazilian Portuguese (PT-BR).`,
       },
       { role: 'user', content: params.chunkContent },
     ],

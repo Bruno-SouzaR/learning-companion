@@ -119,7 +119,7 @@ export function chunkTextBySections(
 
   const getBreadcrumb = () => {
     if (!activeH1 && !activeH2) return '';
-    return `[Contexto no Documento: ${activeH1}${activeH2 ? ` > ${activeH2}` : ''}]\n\n`;
+    return `[Document Context: ${activeH1}${activeH2 ? ` > ${activeH2}` : ''}]\n\n`;
   };
 
   const updateHeadings = (textBlock: string) => {
