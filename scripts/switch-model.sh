@@ -28,7 +28,7 @@ declare -A MODEL_ALIASES=(
 declare -A MODEL_CTX=(
   ["gemma-4-e2b"]="8192"
   ["gemma-4-e2b-q5"]="8192"
-  ["gemma-4-e4b"]="8192"
+  ["gemma-4-e4b"]="16384"
   ["qwen-2b-q5"]="8192"
   ["qwen-2b-q8"]="8192"
   ["qwen-4b-q5"]="8192"
@@ -36,9 +36,9 @@ declare -A MODEL_CTX=(
 )
 
 declare -A MODEL_EXTRA_FLAGS=(
-  ["gemma-4-e2b"]="-fa on -ctk q8_0 -ctv q8_0"
-  ["gemma-4-e2b-q5"]="-fa on -ctk q8_0 -ctv q8_0"
-  ["gemma-4-e4b"]="-fa on -ctk q8_0 -ctv q8_0"
+  ["gemma-4-e2b"]="-np 1 -fa on -ctk q8_0 -ctv q8_0"
+  ["gemma-4-e2b-q5"]="-np 1 -fa on -ctk q8_0 -ctv q8_0"
+  ["gemma-4-e4b"]="-np 1 -fa on -ctk q8_0 -ctv q8_0"
   ["qwen-2b-q5"]=""
   ["qwen-2b-q8"]=""
   ["qwen-4b-q5"]=""

@@ -65,12 +65,12 @@ export async function requestChatCompletion(params: {
   const endpoint = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    Connection: 'keep-alive',
   };
 
   if (env.LLM_API_KEY && env.LLM_API_KEY.trim() !== '') {
     headers['Authorization'] = `Bearer ${env.LLM_API_KEY.trim()}`;
   }
-
   const resolvedModel = params.model || env.LLM_MODEL;
   const isGemma = /gemma/i.test(resolvedModel);
   const isQwen = /qwen/i.test(resolvedModel);
@@ -108,33 +108,46 @@ export async function requestChatCompletion(params: {
     payload.max_tokens = params.maxTokens;
   }
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `LLM request failed (${response.status}): ${errorText || response.statusText}. Please verify LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL in your .env file.`
-    );
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `LLM request failed (${response.status}): ${errorText || response.statusText}. Please verify LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL in your .env file.`
+        );
+      }
+
+      const data = await response.json();
+      const rawContent = data.choices?.[0]?.message?.content;
+      const finishReason = data.choices?.[0]?.finish_reason || '';
+
+      if (!rawContent) {
+        throw new Error('LLM returned an empty response');
+      }
+
+      return {
+        content: rawContent,
+        finishReason,
+      };
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(`[LLM request attempt ${attempt}/2 failed]: ${lastError.message}`);
+      if (attempt < 2) {
+        const { promise, resolve } = Promise.withResolvers<void>();
+        setTimeout(resolve, 2000);
+        await promise;
+      }
+    }
   }
-
-  const data = await response.json();
-  const rawContent = data.choices?.[0]?.message?.content;
-  const finishReason = data.choices?.[0]?.finish_reason || '';
-
-  if (!rawContent) {
-    throw new Error('LLM returned an empty response');
-  }
-
-  return {
-    content: rawContent,
-    finishReason,
-  };
+  throw lastError || new Error('LLM request failed after retries');
 }
-
 /**
  * Structured JSON completion with markdown-fence stripping and chat-style recovery.
  */

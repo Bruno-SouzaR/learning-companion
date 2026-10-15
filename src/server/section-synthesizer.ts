@@ -1,5 +1,6 @@
 import { callLlmMarkdown } from './llm';
 import { sanitizePortugueseMarkdown, pruneDanglingMarkdownTail } from './markdown-sanitizer';
+import { getStudiesModel, getStudiesBaseUrl } from './env';
 export interface ParsedSection {
   sectionTitle: string;
   keyPoints: string[];
@@ -141,6 +142,8 @@ export async function synthesizeSection(params: {
     ],
     maxTokens: 3000,
     maxContinuations: 2,
+    model: getStudiesModel(),
+    baseUrl: getStudiesBaseUrl(),
   });
 
   const pruned = pruneDanglingMarkdownTail(rawMarkdown);
