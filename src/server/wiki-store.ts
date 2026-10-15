@@ -352,11 +352,9 @@ export async function syncWikiToDb(): Promise<number> {
             ? parseInt(file.match(/-v(\d+)\.md$/i)?.[1] || '1', 10)
             : 1;
 
-        const status = (anyData.status as string) || 'active';
-
-        // Check if already indexed with embedding
-        const existing = db.prepare('SELECT embedding FROM entries WHERE id = ?').get(id) as { embedding?: string } | undefined;
-
+        // Check if already indexed with embedding and status
+        const existing = db.prepare('SELECT embedding, status FROM entries WHERE id = ?').get(id) as { embedding?: string; status?: string } | undefined;
+        const status = existing?.status === 'archived' ? 'archived' : (anyData.status as string) || 'active';
         let embeddingStr = existing?.embedding;
         if (!embeddingStr) {
           const textToEmbed = `${data.target_en || ''} ${data.input_pt || ''} ${title} ${tags.join(' ')}`;
@@ -543,6 +541,11 @@ export async function searchWikiEntries(query: string, limit = 10): Promise<Stor
 export function archiveEntry(entryId: string): boolean {
   const db = getDb();
   const now = new Date().toISOString();
+
+  const row = db
+    .prepare('SELECT id, file_path FROM entries WHERE id = ?')
+    .get(entryId) as { id: string; file_path: string | null } | undefined;
+
   const res = db
     .prepare(`
       UPDATE entries
@@ -550,5 +553,14 @@ export function archiveEntry(entryId: string): boolean {
       WHERE id = ?
     `)
     .run(now, entryId);
+
+  if (row?.file_path && fs.existsSync(row.file_path)) {
+    try {
+      fs.unlinkSync(row.file_path);
+    } catch (e) {
+      console.warn(`[archiveEntry] failed to unlink physical file ${row.file_path}:`, e);
+    }
+  }
+
   return res.changes > 0;
 }

@@ -58,6 +58,15 @@ export function StudyRecords({ onPracticeEntry }: StudyRecordsProps = {}) {
         throw new Error(json.error || 'Falha ao ocultar material');
       }
       setEntries((prev) => prev.filter((e) => e.id !== entryId));
+      setSelectedVersionBySlug((prev) => {
+        const updated = { ...prev };
+        for (const [slug, verId] of Object.entries(updated)) {
+          if (verId === entryId) {
+            delete updated[slug];
+          }
+        }
+        return updated;
+      });
     } catch (err) {
       console.error('Erro ao arquivar material:', err);
     } finally {
@@ -391,7 +400,11 @@ export function StudyRecords({ onPracticeEntry }: StudyRecordsProps = {}) {
                     <div className="flex items-center gap-2">
                       {confirmArchiveId === activeEntry.id ? (
                         <div className="flex items-center gap-1 bg-rose-950/80 p-1 rounded-lg border border-rose-800 text-xs">
-                          <span className="text-[10px] text-rose-200 px-1">Ocultar material?</span>
+                          <span className="text-[10px] text-rose-200 px-1 font-medium">
+                            {group.versions.length > 1
+                              ? `Excluir v${activeEntry.version || 1}?`
+                              : 'Excluir material?'}
+                          </span>
                           <button
                             type="button"
                             onClick={() => handleArchive(activeEntry.id)}
@@ -417,8 +430,16 @@ export function StudyRecords({ onPracticeEntry }: StudyRecordsProps = {}) {
                           type="button"
                           onClick={() => setConfirmArchiveId(activeEntry.id)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors cursor-pointer"
-                          title="Ocultar material do caderno"
-                          aria-label="Ocultar material do caderno"
+                          title={
+                            group.versions.length > 1
+                              ? `Excluir esta versão (v${activeEntry.version || 1})`
+                              : 'Excluir material do caderno'
+                          }
+                          aria-label={
+                            group.versions.length > 1
+                              ? `Excluir esta versão (v${activeEntry.version || 1})`
+                              : 'Excluir material do caderno'
+                          }
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
