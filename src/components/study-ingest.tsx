@@ -357,7 +357,7 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngest
     }));
   }
 
-  function handleJumpToConcept(sectionIndex: number, bulletText: string, bulletIdx: number) {
+  function handleJumpToConcept(sectionIndex: number, bulletText: string, bulletIdx: number, totalBullets: number) {
     // If section is collapsed, auto-expand it first so elements exist in DOM
     if (collapsedSectionIndices[sectionIndex]) {
       setCollapsedSectionIndices((prev) => ({
@@ -370,69 +370,52 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngest
       const sectionArticle = document.getElementById(`section-article-${sectionIndex}`);
       if (!sectionArticle) return;
 
-      const headings = Array.from(sectionArticle.querySelectorAll<HTMLElement>('.heading-anchor, h3, h4'));
-      if (headings.length === 0) return;
+      // Select ONLY substantive concept headings (exclude "Pontos Nucleares" and section titles)
+      const allH3s = Array.from(sectionArticle.querySelectorAll<HTMLElement>('.heading-anchor, h3'));
+      const conceptHeadings = allH3s.filter((h) => {
+        const text = (h.innerText || h.textContent || '').toLowerCase();
+        return !text.includes('pontos nucleares') && h.tagName.toLowerCase() === 'h3';
+      });
 
-      const normalize = (s: string) =>
+      if (conceptHeadings.length === 0) return;
+
+      const M = conceptHeadings.length;
+      const N = Math.max(1, totalBullets);
+
+      // Monotonic sequential slice: each bullet i strictly owns a slice of concept headings in sequence
+      const startJ = Math.floor((bulletIdx * M) / N);
+      const endJ = Math.max(startJ + 1, Math.min(M, Math.ceil(((bulletIdx + 1) * M) / N)));
+      const slice = conceptHeadings.slice(startJ, endJ);
+
+      const cleanPt = (s: string) =>
         s
           .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[ç]/g, 'c')
+          .replace(/[ãáàâ]/g, 'a')
+          .replace(/[éê]/g, 'e')
+          .replace(/[íî]/g, 'i')
+          .replace(/[óõô]/g, 'o')
+          .replace(/[úû]/g, 'u')
           .replace(/[^a-z0-9\s]/g, ' ');
 
-      const stopWords = new Set([
-        'para', 'como', 'onde', 'quando', 'qual', 'pelo', 'pela', 'pelos', 'pelas',
-        'mais', 'menos', 'muito', 'cada', 'todo', 'toda', 'todos', 'todas',
-        'esse', 'essa', 'esses', 'essas', 'este', 'esta', 'estes', 'estas',
-        'isso', 'isto', 'aquilo', 'sobre', 'entre', 'atraves', 'sendo', 'estao',
-        'podem', 'deve', 'devem', 'forma', 'sistema', 'sistemas', 'arquivo', 'arquivos',
-        'definicao', 'teorica', 'mecanismo', 'aplicacao', 'pratica', 'exemplo'
-      ]);
+      const normBullet = cleanPt(bulletText);
+      let bestHeading = slice[0] || conceptHeadings[startJ] || conceptHeadings[0];
+      let bestScore = 0;
 
-      const rawWords = normalize(bulletText).split(/\s+/).filter((w) => w.length >= 4 && !stopWords.has(w));
+      for (const h of slice) {
+        const normH = cleanPt(h.innerText || h.textContent || '');
+        const words = normH.split(/\s+/).filter((w) => w.length >= 4);
+        const matchCount = words.filter((w) => normBullet.includes(w)).length;
 
-      let bestMatch: HTMLElement | null = null;
-      let highestScore = 0;
-
-      for (const h of headings) {
-        const hText = normalize(h.innerText || h.textContent || '');
-        let score = 0;
-
-        for (const word of rawWords) {
-          if (hText.includes(word)) {
-            score += 4;
-          }
-        }
-
-        const nextElem = h.nextElementSibling as HTMLElement | null;
-        if (nextElem && score > 0) {
-          const nextText = normalize(nextElem.innerText || '');
-          for (const word of rawWords) {
-            if (nextText.includes(word)) {
-              score += 1;
-            }
-          }
-        }
-
-        if (score > highestScore) {
-          highestScore = score;
-          bestMatch = h;
+        if (matchCount > bestScore) {
+          bestScore = matchCount;
+          bestHeading = h;
         }
       }
 
-      if (!bestMatch || highestScore < 4) {
-        const h3s = headings.filter((h) => h.tagName.toLowerCase() === 'h3');
-        if (h3s.length > 0) {
-          const fallbackIdx = Math.min(bulletIdx, h3s.length - 1);
-          bestMatch = h3s[fallbackIdx];
-        } else {
-          bestMatch = headings[0];
-        }
-      }
-
-      if (bestMatch) {
-        bestMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        bestMatch.classList.add(
+      if (bestHeading) {
+        bestHeading.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        bestHeading.classList.add(
           'ring-2',
           'ring-indigo-400',
           'bg-indigo-950/60',
@@ -443,7 +426,7 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngest
           'shadow-indigo-950/50'
         );
         setTimeout(() => {
-          bestMatch?.classList.remove(
+          bestHeading?.classList.remove(
             'ring-2',
             'ring-indigo-400',
             'bg-indigo-950/60',
@@ -701,7 +684,7 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngest
                               <li key={kIdx}>
                                 <button
                                   type="button"
-                                  onClick={() => handleJumpToConcept(sec.sectionIndex, kp, kIdx)}
+                                  onClick={() => handleJumpToConcept(sec.sectionIndex, kp, kIdx, sec.keyPoints.length)}
                                   className="w-full text-left flex items-start gap-2.5 py-1.5 px-2 rounded-lg text-slate-200 hover:text-indigo-200 hover:bg-indigo-950/40 transition-all cursor-pointer group"
                                   title="Clique para centralizar a explicação deste conceito na tela"
                                 >
