@@ -55,6 +55,10 @@ export async function requestChatCompletion(params: {
   jsonMode?: boolean;
   model?: string;
   baseUrl?: string;
+  topP?: number;
+  topK?: number;
+  presencePenalty?: number;
+  repeatPenalty?: number;
 }): Promise<LlmResponse> {
   const env = getEnv();
   const baseUrl = params.baseUrl || env.LLM_BASE_URL;
@@ -72,6 +76,11 @@ export async function requestChatCompletion(params: {
     messages: params.messages,
     temperature: params.temperature ?? 0.2,
   };
+
+  if (params.topP !== undefined) payload.top_p = params.topP;
+  if (params.topK !== undefined) payload.top_k = params.topK;
+  if (params.presencePenalty !== undefined) payload.presence_penalty = params.presencePenalty;
+  if (params.repeatPenalty !== undefined) payload.repetition_penalty = params.repeatPenalty;
 
   if (params.jsonMode) {
     payload.response_format = { type: 'json_object' };
@@ -160,6 +169,10 @@ export async function callLlmMarkdown(params: {
   maxContinuations?: number;
   model?: string;
   baseUrl?: string;
+  topP?: number;
+  topK?: number;
+  presencePenalty?: number;
+  repeatPenalty?: number;
 }): Promise<string> {
   const maxContinuations = params.maxContinuations ?? 3;
   let result = '';
@@ -173,6 +186,10 @@ export async function callLlmMarkdown(params: {
       maxTokens: params.maxTokens,
       model: params.model,
       baseUrl: params.baseUrl,
+      topP: params.topP,
+      topK: params.topK,
+      presencePenalty: params.presencePenalty,
+      repeatPenalty: params.repeatPenalty,
     });
 
     result += response.content;

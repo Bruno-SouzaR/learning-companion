@@ -102,7 +102,7 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<ExtractedDocum
  */
 export function chunkTextBySections(
   text: string,
-  maxTokensPerChunk = 2400,
+  maxTokensPerChunk = 1800,
   overlapTokens = 200
 ): DocumentChunk[] {
   const cleaned = cleanExtractedText(text);
@@ -114,38 +114,61 @@ export function chunkTextBySections(
   let currentChunkParagraphs: string[] = [];
   let currentTokens = 0;
   let chunkIndex = 0;
+  let activeH1 = '';
+  let activeH2 = '';
 
+  const getBreadcrumb = () => {
+    if (!activeH1 && !activeH2) return '';
+    return `[Contexto no Documento: ${activeH1}${activeH2 ? ` > ${activeH2}` : ''}]\n\n`;
+  };
+
+  const updateHeadings = (textBlock: string) => {
+    const lines = textBlock.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (/^#\s+/.test(trimmed) && trimmed.length < 120) {
+        activeH1 = trimmed.replace(/^#\s+/, '').trim();
+        activeH2 = '';
+      } else if (/^##\s+/.test(trimmed) && trimmed.length < 120) {
+        activeH2 = trimmed.replace(/^##\s+/, '').trim();
+      } else if (/^(?:M[óo]dulo|Cap[íi]tulo)\s+\d+/i.test(trimmed) && trimmed.length < 120) {
+        activeH1 = trimmed;
+        activeH2 = '';
+      }
+    }
+  };
+
+  const finalizeChunk = (paras: string[]): DocumentChunk => {
+    const rawBody = paras.join('\n\n');
+    const bc = getBreadcrumb();
+    const finalContent =
+      bc && !/^\s*#{1,2}\s+/m.test(rawBody.slice(0, 120)) ? `${bc}${rawBody}` : rawBody;
+    return {
+      index: chunkIndex++,
+      content: finalContent,
+      estimatedTokens: estimateDocumentTokens(finalContent),
+    };
+  };
   for (const para of paragraphs) {
     const paraTokens = estimateDocumentTokens(para);
 
     // If single paragraph exceeds limit, push it as its own chunk
+    updateHeadings(para);
+
+    // If single paragraph exceeds limit, push it as its own chunk
     if (paraTokens >= maxTokensPerChunk) {
       if (currentChunkParagraphs.length > 0) {
-        const chunkContent = currentChunkParagraphs.join('\n\n');
-        chunks.push({
-          index: chunkIndex++,
-          content: chunkContent,
-          estimatedTokens: estimateDocumentTokens(chunkContent),
-        });
+        chunks.push(finalizeChunk(currentChunkParagraphs));
         currentChunkParagraphs = [];
         currentTokens = 0;
       }
 
-      chunks.push({
-        index: chunkIndex++,
-        content: para,
-        estimatedTokens: paraTokens,
-      });
+      chunks.push(finalizeChunk([para]));
       continue;
     }
 
     if (currentTokens + paraTokens > maxTokensPerChunk) {
-      const chunkContent = currentChunkParagraphs.join('\n\n');
-      chunks.push({
-        index: chunkIndex++,
-        content: chunkContent,
-        estimatedTokens: estimateDocumentTokens(chunkContent),
-      });
+      chunks.push(finalizeChunk(currentChunkParagraphs));
 
       // Calculate overlap paragraphs from the tail of current chunk
       const overlapParas: string[] = [];
@@ -170,12 +193,7 @@ export function chunkTextBySections(
   }
 
   if (currentChunkParagraphs.length > 0) {
-    const chunkContent = currentChunkParagraphs.join('\n\n');
-    chunks.push({
-      index: chunkIndex++,
-      content: chunkContent,
-      estimatedTokens: estimateDocumentTokens(chunkContent),
-    });
+    chunks.push(finalizeChunk(currentChunkParagraphs));
   }
 
   return chunks;

@@ -133,7 +133,10 @@ RULES & CONSTRAINTS:
    - "Gabarito" / "Gabarito Comentado" / "Alternativas A, B, C, D"
    - "Referências Bibliográficas" / "Bibliografia" / "Explore+" / "Saiba Mais" / "Fontes"
    Do NOT create subtopics, definitions, or analyses for textbook test questions.
-   Focus EXCLUSIVELY on core technical theory, architecture, engineering mechanisms, and real commands.`;
+   Focus EXCLUSIVELY on core technical theory, architecture, engineering mechanisms, and real commands.
+7. STRICT TITLE RULE (NO GENERIC HEADINGS):
+   NEVER create generic titles like "Sistema de Arquivos", "Introdução", "Conceitos Fundamentais", "Resumo", "Visão Geral", "Pontos Principais", "Análise Técnica" or "Seção X".
+   The main section heading (#) and all subheadings (###) MUST explicitly state the specific technology, data structure, algorithm, Linux command, or architectural mechanism discussed in the chunk (e.g. "# Alocação por I-nodes e Ponteiros Indiretos no ext2", "# Gerenciamento de Espaço Livre e Mapas de Bits", "# Políticas de Cache e Journaling").`;
 
 /**
  * Synthesize one section of a study document as pure Markdown, extending
@@ -156,18 +159,34 @@ export async function synthesizeSection(params: {
       },
       { role: 'user', content: params.chunkContent },
     ],
-    temperature: 0.2,
-    maxTokens: 1500,
+    temperature: 0.7,
+    topP: 0.8,
+    topK: 20,
+    presencePenalty: 1.5,
+    repeatPenalty: 1.0,
+    maxTokens: 1800,
     maxContinuations: 1,
   });
 
   const parsed = parseSectionMarkdown(rawMarkdown);
   parsed.markdown = sanitizePortugueseMarkdown(parsed.markdown);
   parsed.keyPoints = parsed.keyPoints.map(sanitizePortugueseMarkdown);
-  if (!parsed.sectionTitle || parsed.sectionTitle.startsWith('Seção sem') || parsed.sectionTitle.startsWith('Sección sin')) {
-    parsed.sectionTitle = `Seção ${params.sectionIndex}`;
+
+  const cleanTitle = (parsed.sectionTitle || '').trim();
+  const isGeneric =
+    !cleanTitle ||
+    cleanTitle.startsWith('Seção sem') ||
+    cleanTitle.startsWith('Sección sin') ||
+    cleanTitle.toLowerCase() === params.title.toLowerCase();
+
+  if (isGeneric) {
+    // Pick the first substantive ### heading if available
+    const firstSubhead = parsed.markdown.match(/^###\s+([^\n]+)/m)?.[1]?.trim();
+    parsed.sectionTitle = firstSubhead
+      ? sanitizePortugueseMarkdown(firstSubhead)
+      : `Seção ${params.sectionIndex}`;
   } else {
-    parsed.sectionTitle = sanitizePortugueseMarkdown(parsed.sectionTitle);
+    parsed.sectionTitle = sanitizePortugueseMarkdown(cleanTitle);
   }
   return parsed;
 }
