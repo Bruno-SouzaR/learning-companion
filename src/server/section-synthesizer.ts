@@ -140,7 +140,7 @@ export async function synthesizeSection(params: {
       },
       { role: 'user', content: params.chunkContent },
     ],
-    maxTokens: 3000,
+    maxTokens: 2500,
     maxContinuations: 2,
     model: getStudiesModel(),
     baseUrl: getStudiesBaseUrl(),

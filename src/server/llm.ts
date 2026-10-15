@@ -1,6 +1,48 @@
+import http from 'node:http';
+import https from 'node:https';
 import { z } from 'zod';
 import { getEnv, getEnglishModel } from './env';
 
+async function postJson(
+  urlStr: string,
+  headers: Record<string, string>,
+  payload: Record<string, unknown>
+): Promise<{ status: number; text: string }> {
+  const url = new URL(urlStr);
+  const client = url.protocol === 'https:' ? https : http;
+  const postData = JSON.stringify(payload);
+
+  const reqHeaders: Record<string, string> = {
+    ...headers,
+    'Content-Type': 'application/json',
+    'Content-Length': String(Buffer.byteLength(postData)),
+  };
+
+  const { promise, resolve, reject } = Promise.withResolvers<{ status: number; text: string }>();
+
+  const req = client.request(
+    url,
+    {
+      method: 'POST',
+      headers: reqHeaders,
+      timeout: 0, // No socket timeout: AI completions on local GPU can take as long as needed
+    },
+    (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf-8');
+        resolve({ status: res.statusCode || 200, text });
+      });
+    }
+  );
+
+  req.on('error', (err) => reject(err));
+  req.write(postData);
+  req.end();
+
+  return promise;
+}
 export const refineResultSchema = z.object({
   title: z.string().describe('Short descriptive title in Portuguese for this practice entry'),
   target_english: z.string().describe('Natural, idiomatic English translation'),
@@ -108,23 +150,43 @@ export async function requestChatCompletion(params: {
     payload.max_tokens = params.maxTokens;
   }
 
+  // In test environment, use globalThis.fetch to support Vitest spies/mocks
+  if (process.env.NODE_ENV === 'test') {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`LLM request failed (${response.status}): ${errorText || response.statusText}`);
+    }
+
+    const data = await response.json();
+    const rawContent = data.choices?.[0]?.message?.content;
+    const finishReason = data.choices?.[0]?.finish_reason || '';
+
+    if (!rawContent) {
+      throw new Error('LLM returned an empty response');
+    }
+
+    return { content: rawContent, finishReason };
+  }
+
+  // In production/server runtime, use native node:http to avoid Next.js 300s fetch headers timeout
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
+      const { status, text: resText } = await postJson(endpoint, headers, payload);
 
-      if (!response.ok) {
-        const errorText = await response.text();
+      if (status < 200 || status >= 300) {
         throw new Error(
-          `LLM request failed (${response.status}): ${errorText || response.statusText}. Please verify LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL in your .env file.`
+          `LLM request failed (${status}): ${resText}. Please verify LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL in your .env file.`
         );
       }
 
-      const data = await response.json();
+      const data = JSON.parse(resText);
       const rawContent = data.choices?.[0]?.message?.content;
       const finishReason = data.choices?.[0]?.finish_reason || '';
 
@@ -146,6 +208,7 @@ export async function requestChatCompletion(params: {
       }
     }
   }
+
   throw lastError || new Error('LLM request failed after retries');
 }
 /**
