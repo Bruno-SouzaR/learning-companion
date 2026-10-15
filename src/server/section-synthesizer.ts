@@ -172,7 +172,7 @@ CRITICAL INSTRUCTION FOR THIS SECTION (Execute over the source text above):
       { role: 'user', content: userMessageContent },
     ],
     maxTokens: 2400,
-    maxContinuations: 1,
+    maxContinuations: 2,
   });
 
   const pruned = pruneDanglingMarkdownTail(rawMarkdown);

@@ -82,15 +82,14 @@ export async function requestChatCompletion(params: {
       params.temperature !== undefined
         ? params.temperature
         : isGemma
-        ? 0.35
+        ? 0.25
         : isQwen
         ? 0.7
         : 0.2,
   };
 
-  const topP = params.topP !== undefined ? params.topP : isGemma ? 0.92 : isQwen ? 0.8 : undefined;
+  const topP = params.topP !== undefined ? params.topP : isGemma ? 0.90 : isQwen ? 0.8 : undefined;
   if (topP !== undefined) payload.top_p = topP;
-
   const topK = params.topK !== undefined ? params.topK : isGemma ? 64 : isQwen ? 20 : undefined;
   if (topK !== undefined) payload.top_k = topK;
 
