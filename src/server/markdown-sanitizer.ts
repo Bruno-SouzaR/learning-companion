@@ -30,3 +30,38 @@ export function sanitizePortugueseMarkdown(text: string): string {
     // Defensively strip leaked textbook assessment questions, answer choices, and gabaritos
     .replace(/\n#{1,4}\s*(?:Verificando\s+o\s+Aprendizado|Verifica[cç][aã]o\s+de\s+Aprendizado|Atividades?\s+de\s+Autoavalia[cç][aã]o|Autoavalia[cç][aã]o|Exerc[íi]cios?\s+Propostos?|Gabarito(?:\s+Final|\s+Comentado)?)[\s\S]*?(?=\n#{1,2}\s|\n\s*---\s*\n|$)/gi, '');
 }
+
+/**
+ * Defensively cleans and closes truncated Markdown tails (dangling bullet points,
+ * unclosed code fences, or truncated sentences caused by token caps).
+ */
+export function pruneDanglingMarkdownTail(markdown: string): string {
+  if (!markdown || typeof markdown !== 'string') return '';
+  let text = markdown.trim();
+
+  // 1. Close unclosed code fences
+  const codeFenceMatches = text.match(/```/g);
+  if (codeFenceMatches && codeFenceMatches.length % 2 !== 0) {
+    text = `${text}\n\`\`\``;
+  }
+
+  // 2. Remove dangling empty bullets or headers at the end of the text
+  const trailingDanglingRegex =
+    /(?:\n\s*[-*]\s+\*\*[^*]+\*\*:\s*|\n\s*[-*]\s+\*\*[A-Za-z0-9_]*\s*|\n\s*#{1,4}\s+[^\n]*|\n\s*[-*]\s*)$/i;
+  while (trailingDanglingRegex.test(text)) {
+    text = text.replace(trailingDanglingRegex, '').trim();
+  }
+
+  // 3. If the final line was cut mid-sentence, prune back to the last complete line
+  const lines = text.split('\n');
+  if (lines.length > 0) {
+    const lastLine = lines[lines.length - 1].trim();
+    const hasValidEnding = /[.!?:`|\])}]$/.test(lastLine);
+    if (!hasValidEnding && lastLine.length > 0 && lines.length > 3) {
+      lines.pop();
+      text = lines.join('\n').trim();
+    }
+  }
+
+  return text;
+}

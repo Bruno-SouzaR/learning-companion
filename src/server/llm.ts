@@ -71,17 +71,36 @@ export async function requestChatCompletion(params: {
     headers['Authorization'] = `Bearer ${env.LLM_API_KEY.trim()}`;
   }
 
+  const resolvedModel = params.model || env.LLM_MODEL;
+  const isGemma = /gemma/i.test(resolvedModel);
+  const isQwen = /qwen/i.test(resolvedModel);
+
   const payload: Record<string, unknown> = {
-    model: params.model || env.LLM_MODEL,
+    model: resolvedModel,
     messages: params.messages,
-    temperature: params.temperature ?? 0.2,
+    temperature:
+      params.temperature !== undefined
+        ? params.temperature
+        : isGemma
+        ? 0.35
+        : isQwen
+        ? 0.7
+        : 0.2,
   };
 
-  if (params.topP !== undefined) payload.top_p = params.topP;
-  if (params.topK !== undefined) payload.top_k = params.topK;
-  if (params.presencePenalty !== undefined) payload.presence_penalty = params.presencePenalty;
-  if (params.repeatPenalty !== undefined) payload.repetition_penalty = params.repeatPenalty;
+  const topP = params.topP !== undefined ? params.topP : isGemma ? 0.92 : isQwen ? 0.8 : undefined;
+  if (topP !== undefined) payload.top_p = topP;
 
+  const topK = params.topK !== undefined ? params.topK : isGemma ? 64 : isQwen ? 20 : undefined;
+  if (topK !== undefined) payload.top_k = topK;
+
+  const presencePenalty =
+    params.presencePenalty !== undefined ? params.presencePenalty : isGemma ? 0.0 : isQwen ? 1.5 : undefined;
+  if (presencePenalty !== undefined) payload.presence_penalty = presencePenalty;
+
+  const repeatPenalty =
+    params.repeatPenalty !== undefined ? params.repeatPenalty : isGemma ? 1.05 : isQwen ? 1.0 : undefined;
+  if (repeatPenalty !== undefined) payload.repetition_penalty = repeatPenalty;
   if (params.jsonMode) {
     payload.response_format = { type: 'json_object' };
   }

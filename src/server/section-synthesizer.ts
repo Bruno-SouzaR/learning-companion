@@ -1,5 +1,5 @@
 import { callLlmMarkdown } from './llm';
-import { sanitizePortugueseMarkdown } from './markdown-sanitizer';
+import { sanitizePortugueseMarkdown, pruneDanglingMarkdownTail } from './markdown-sanitizer';
 export interface ParsedSection {
   sectionTitle: string;
   keyPoints: string[];
@@ -149,6 +149,18 @@ export async function synthesizeSection(params: {
   totalSections: number;
   chunkContent: string;
 }): Promise<ParsedSection> {
+  const userMessageContent = `${params.chunkContent}
+
+---
+CRITICAL INSTRUCTION FOR THIS SECTION (Execute over the source text above):
+1. STRICT TECHNICAL TITLE (PT-BR): Provide a specific heading (#) that explicitly names the primary technology, algorithm, or data structure in this section. NEVER use generic titles like "Sistema de Arquivos", "Introdução", "Resumo", or "Seção ${params.sectionIndex}".
+2. EXHAUSTIVE CONCEPT COVERAGE WITH CLEAN CLOSURE:
++- Extract ### Pontos Nucleares (5-8 bullets).
++- Expand every technical concept into ### [Nome do Conceito] with Definição Teórica, Mecanismo & Aplicação Prática, and Exemplo Prático.
++- Every opened subtopic and bullet MUST be fully explained and cleanly closed with terminal punctuation. NEVER leave an empty bullet like "- **Exemplo Prático:**" without its explanation.
+3. CODE & TABLES: Close all code blocks with \`\`\`. Use markdown tables "| Mecanismo | Vantagens | Desvantagens |" when comparing mechanisms.
+4. IGNORE TEXTBOOK QUIZZES: Completely omit "Verificando o Aprendizado", questionnaires, and bibliographies.`;
+
   const rawMarkdown = await callLlmMarkdown({
     messages: [
       {
@@ -157,21 +169,17 @@ export async function synthesizeSection(params: {
           params.sectionIndex
         } of ${params.totalSections}. Output all content strictly in Brazilian Portuguese (PT-BR).`,
       },
-      { role: 'user', content: params.chunkContent },
+      { role: 'user', content: userMessageContent },
     ],
-    temperature: 0.7,
-    topP: 0.8,
-    topK: 20,
-    presencePenalty: 1.5,
-    repeatPenalty: 1.0,
-    maxTokens: 1800,
+    maxTokens: 2400,
     maxContinuations: 1,
   });
 
-  const parsed = parseSectionMarkdown(rawMarkdown);
-  parsed.markdown = sanitizePortugueseMarkdown(parsed.markdown);
+  const pruned = pruneDanglingMarkdownTail(rawMarkdown);
+  const sanitized = sanitizePortugueseMarkdown(pruned);
+  const parsed = parseSectionMarkdown(sanitized);
+  parsed.markdown = sanitized;
   parsed.keyPoints = parsed.keyPoints.map(sanitizePortugueseMarkdown);
-
   const cleanTitle = (parsed.sectionTitle || '').trim();
   const isGeneric =
     !cleanTitle ||
