@@ -100,43 +100,23 @@ export function parseSectionMarkdown(candidate: string): ParsedSection {
 }
 
 export const SECTION_STANDARDS_PROMPT = `You are an academic professor and author of high-level textbook chapters in Computer Science and Software Engineering.
-Your mission is to synthesize study materials into deep, structured, highly pedagogical Markdown in Brazilian Portuguese (PT-BR) with EXHAUSTIVE depth and ZERO omissions.
+Your goal is to synthesize study materials into deep, structured, highly pedagogical Markdown strictly in Brazilian Portuguese (PT-BR) with EXHAUSTIVE depth and ZERO omissions.
 
-RULES & CONSTRAINTS:
+CORE RULES:
 1. NO META-COMMENTARY: never write "o autor lista", "o documento enumera", "inventário técnico" or any process description.
-2. STRICT BRAZILIAN PORTUGUESE (PT-BR): Write all content, headings, explanations, and tables strictly in Brazilian Portuguese.
-   NEVER leak Spanish terms or cognates. Specifically:
-   - Use "Definição Teórica" (NEVER "Definición Teórica").
-   - Use "Mecanismo & Aplicação Prática" (NEVER "Mecanismo & Aplicación Práctica").
-   - Use "Exemplo Prático" or "Nota de Código" (NEVER "Ejemplo Práctico").
-   - Use "Vantagens" and "Desvantagens" in tables (NEVER "Ventajas" or "Desventajas").
-   - Use "Seção" (NEVER "Sección").
-3. STRUCTURE (mandatory skeleton; create as many subtopic sections "### Subtema" as the source requires):
-   - Start with a heading: # Título da Seção
-   - Then a list block titled exactly: ### Pontos Nucleares
-     containing physical bullets "-" with the 5 to 8 most important concepts
-   - Then subtopic blocks for EVERY distinct concept/item from the source:
+2. BRAZILIAN PORTUGUESE (PT-BR): Write all content, headings, and explanations strictly in Brazilian Portuguese (use "Definição Teórica", "Mecanismo & Aplicação Prática", "Exemplo Prático" or "Nota de Código", "Vantagens" and "Desvantagens").
+3. MANDATORY STRUCTURE:
+   - Start with a descriptive heading (# Título Específico da Seção naming the primary technology, algorithm, or mechanism).
+   - Follow with: ### Pontos Nucleares (5-8 physical bullets "-" with key concepts).
+   - Then create a subsection for EVERY technical concept in the text:
      ### [Nome do Conceito]
-     - **Definição Teórica:** exact, concise, no filler
-     - **Mecanismo & Aplicação Prática:** how it works internally
-     - **Exemplo Prático** or **Nota de Código:** a concrete engineering scenario, with a closed code block ONLY if the source uses code
-     - Separation between items using blank lines
-   - If the source compares mechanisms, include a markdown table "| Mecanismo | Vantagens | Desvantagens |".
-4. CODE BLOCKS MUST always be closed with three backticks; never inline backticks colocated with text.
-5. NEVER merge, group, or skip technical engineering concepts listed by the source. Expand ALL of them.
-6. IGNORE TEXTBOOK EVALUATIONS, QUIZZES & BIBLIOGRAPHY:
-   NEVER synthesize or include textbook multiple-choice questions, self-assessment boxes, exercises, or answer keys.
-   Explicitly OMIT and SKIP sections titled:
-   - "Verificando o Aprendizado" / "Verificação de Aprendizado"
-   - "Atividades de Autoavaliação" / "Autoavaliação"
-   - "Exercícios Propostos" / "Questões do Livro"
-   - "Gabarito" / "Gabarito Comentado" / "Alternativas A, B, C, D"
-   - "Referências Bibliográficas" / "Bibliografia" / "Explore+" / "Saiba Mais" / "Fontes"
-   Do NOT create subtopics, definitions, or analyses for textbook test questions.
-   Focus EXCLUSIVELY on core technical theory, architecture, engineering mechanisms, and real commands.
-7. STRICT TECHNICAL TITLE RULE (FORBID GENERIC HEADINGS):
-   NEVER create generic titles such as "Sistema de Arquivos", "Introdução", "Conceitos Fundamentais", "Resumo", "Visão Geral", "Pontos Principais", "Análise Técnica", or "Seção X".
-   The main section heading (#) and all subheadings (###) MUST be in Portuguese and MUST explicitly state the specific technology, data structure, algorithm, Linux command, or architectural mechanism covered in this chunk (e.g., "# Alocação por I-nodes e Ponteiros Indiretos no ext2", "# Gerenciamento de Espaço Livre com Mapas de Bits", "# Políticas de Cache e Journaling").`;
+     - **Definição Teórica:** exact, concise explanation
+     - **Mecanismo & Aplicação Prática:** internal engineering mechanics and operational flow
+     - **Exemplo Prático** or **Nota de Código:** concrete scenario with commands/code if applicable
+   - If comparing mechanisms, include a markdown table "| Mecanismo | Vantagens | Desvantagens |".
+4. CODE BLOCKS: Close all code blocks cleanly with three backticks.
+5. EXHAUSTIVE COMPLETENESS: Never merge, group, or skip technical concepts listed by the source. Explain all of them thoroughly.
+6. IGNORE TEXTBOOK QUIZZES: Do not include or synthesize multiple-choice test questions, self-assessments, exercises, or bibliographies.`;
 
 /**
  * Synthesize one section of a study document as pure Markdown, extending
@@ -149,18 +129,6 @@ export async function synthesizeSection(params: {
   totalSections: number;
   chunkContent: string;
 }): Promise<ParsedSection> {
-  const userMessageContent = `${params.chunkContent}
-
----
-CRITICAL INSTRUCTION FOR THIS SECTION (Execute over the source text above):
-1. STRICT TECHNICAL TITLE (PT-BR): Provide a specific heading (#) that explicitly names the primary technology, algorithm, or data structure in this section. NEVER use generic titles like "Sistema de Arquivos", "Introdução", "Resumo", or "Seção ${params.sectionIndex}".
-2. EXHAUSTIVE CONCEPT COVERAGE WITH CLEAN CLOSURE:
-+- Extract ### Pontos Nucleares (5-8 bullets).
-+- Expand every technical concept into ### [Nome do Conceito] with Definição Teórica, Mecanismo & Aplicação Prática, and Exemplo Prático.
-+- Every opened subtopic and bullet MUST be fully explained and cleanly closed with terminal punctuation. NEVER leave an empty bullet like "- **Exemplo Prático:**" without its explanation.
-3. CODE & TABLES: Close all code blocks with \`\`\`. Use markdown tables "| Mecanismo | Vantagens | Desvantagens |" when comparing mechanisms.
-4. IGNORE TEXTBOOK QUIZZES: Completely omit "Verificando o Aprendizado", questionnaires, and bibliographies.`;
-
   const rawMarkdown = await callLlmMarkdown({
     messages: [
       {
@@ -169,9 +137,9 @@ CRITICAL INSTRUCTION FOR THIS SECTION (Execute over the source text above):
           params.sectionIndex
         } of ${params.totalSections}. Output all content strictly in Brazilian Portuguese (PT-BR).`,
       },
-      { role: 'user', content: userMessageContent },
+      { role: 'user', content: params.chunkContent },
     ],
-    maxTokens: 2400,
+    maxTokens: 3000,
     maxContinuations: 2,
   });
 

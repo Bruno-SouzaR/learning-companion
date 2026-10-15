@@ -32,8 +32,8 @@ export function sanitizePortugueseMarkdown(text: string): string {
 }
 
 /**
- * Defensively cleans and closes truncated Markdown tails (dangling bullet points,
- * unclosed code fences, or truncated sentences caused by token caps).
+ * Safely closes unclosed code fences and trims empty trailing bullet markers
+ * without deleting real text lines.
  */
 export function pruneDanglingMarkdownTail(markdown: string): string {
   if (!markdown || typeof markdown !== 'string') return '';
@@ -45,22 +45,11 @@ export function pruneDanglingMarkdownTail(markdown: string): string {
     text = `${text}\n\`\`\``;
   }
 
-  // 2. Remove dangling empty bullets or headers at the end of the text
+  // 2. Remove dangling empty bullets or headers at the very end of the text
   const trailingDanglingRegex =
     /(?:\n\s*[-*]\s+\*\*[^*]+\*\*:\s*|\n\s*[-*]\s+\*\*[A-Za-z0-9_]*\s*|\n\s*#{1,4}\s+[^\n]*|\n\s*[-*]\s*)$/i;
   while (trailingDanglingRegex.test(text)) {
     text = text.replace(trailingDanglingRegex, '').trim();
-  }
-
-  // 3. If the final line was cut mid-sentence, prune back to the last complete line
-  const lines = text.split('\n');
-  if (lines.length > 0) {
-    const lastLine = lines[lines.length - 1].trim();
-    const hasValidEnding = /[.!?:`|\])}]$/.test(lastLine);
-    if (!hasValidEnding && lastLine.length > 0 && lines.length > 3) {
-      lines.pop();
-      text = lines.join('\n').trim();
-    }
   }
 
   return text;
