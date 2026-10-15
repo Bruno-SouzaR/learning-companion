@@ -117,8 +117,9 @@ CORE RULES:
    - If comparing mechanisms, include a markdown table "| Mecanismo | Vantagens | Desvantagens |".
 4. CODE BLOCKS: Close all code blocks cleanly with three backticks.
 5. EXHAUSTIVE COMPLETENESS: Never merge, group, or skip technical concepts listed by the source. Explain all of them thoroughly.
-6. IGNORE TEXTBOOK QUIZZES: Do not include or synthesize multiple-choice test questions, self-assessments, exercises, or bibliographies.`;
-
+6. IGNORE TEXTBOOK QUIZZES: Do not include or synthesize multiple-choice test questions, self-assessments, exercises, or bibliographies.
+7. MATHEMATICAL FORMULAS & NUMERICAL CALCULATIONS:
+   When the source material contains explicit formulas, performance equations, or architectural capacity limits (e.g. disk latency calculations, block addressing, pointer calculations), preserve and render them explicitly using LaTeX ($...$ or $$...$$). Do not reduce mathematical models to purely qualitative text.`;
 /**
  * Synthesize one section of a study document as pure Markdown, extending
  * automatically via continuation when the model hits the token cap.
@@ -149,7 +150,7 @@ export async function synthesizeSection(params: {
   const pruned = pruneDanglingMarkdownTail(rawMarkdown);
   const sanitized = sanitizePortugueseMarkdown(pruned);
   const parsed = parseSectionMarkdown(sanitized);
-  parsed.markdown = sanitized;
+  parsed.markdown = sanitizePortugueseMarkdown(parsed.markdown);
   parsed.keyPoints = parsed.keyPoints.map(sanitizePortugueseMarkdown);
   const cleanTitle = (parsed.sectionTitle || '').trim();
   const isGeneric =
