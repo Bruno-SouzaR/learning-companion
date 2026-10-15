@@ -26,19 +26,19 @@ declare -A MODEL_ALIASES=(
 )
 
 declare -A MODEL_CTX=(
-  ["gemma-4-e2b"]="65536"
-  ["gemma-4-e2b-q5"]="65536"
-  ["gemma-4-e4b"]="65536"
+  ["gemma-4-e2b"]="8192"
+  ["gemma-4-e2b-q5"]="8192"
+  ["gemma-4-e4b"]="8192"
   ["qwen-2b-q5"]="8192"
-  ["qwen-2b-q8"]="16384"
-  ["qwen-4b-q5"]="16384"
+  ["qwen-2b-q8"]="8192"
+  ["qwen-4b-q5"]="8192"
   ["glm-ocr"]="8192"
 )
 
 declare -A MODEL_EXTRA_FLAGS=(
-  ["gemma-4-e2b"]="-ctk q8_0 -ctv q8_0"
-  ["gemma-4-e2b-q5"]="-ctk q8_0 -ctv q8_0"
-  ["gemma-4-e4b"]="-ctk q8_0 -ctv q8_0"
+  ["gemma-4-e2b"]="-fa on -ctk q8_0 -ctv q8_0"
+  ["gemma-4-e2b-q5"]="-fa on -ctk q8_0 -ctv q8_0"
+  ["gemma-4-e4b"]="-fa on -ctk q8_0 -ctv q8_0"
   ["qwen-2b-q5"]=""
   ["qwen-2b-q8"]=""
   ["qwen-4b-q5"]=""
@@ -119,10 +119,16 @@ if [[ ! -f "$MODEL_PATH" ]]; then
   echo "Error: Model file does not exist at $MODEL_PATH"
   exit 1
 fi
+local_port=8085
+if [[ -f "$ENV_FILE" ]]; then
+  p=$(grep "^LLM_BASE_URL=" "$ENV_FILE" | grep -o ':[0-9]\\+' | tr -d ':')
+  if [[ -n "$p" ]]; then local_port="$p"; fi
+fi
 
 echo "Switching to model preset: $TARGET ($ALIAS)..."
 echo "  Path: $MODEL_PATH"
 echo "  Context: $CTX"
+echo "  Port: $local_port"
 
 mkdir -p "$(dirname "$SERVICE_FILE")"
 
@@ -144,11 +150,10 @@ ExecStart=/var/home/brunosouzar/.local/bin/llama-server \\
   --reasoning off \\
   --reasoning-budget 0 \\
   --host 127.0.0.1 \\
-  --port 8080 \\
+  --port $local_port \\
   --temp 0.2
 Restart=always
 RestartSec=3
-
 [Install]
 WantedBy=default.target
 EOF
@@ -158,12 +163,12 @@ systemctl --user daemon-reload
 pkill -f llama-server 2>/dev/null || true
 systemctl --user restart learning-llm.service
 
-echo "Waiting for llama-server to be ready on port 8080..."
+echo "Waiting for llama-server to be ready on port $local_port..."
 RETRY=0
 MAX_RETRIES=20
 READY=false
 while [[ $RETRY -lt $MAX_RETRIES ]]; do
-  if curl -s http://127.0.0.1:8080/health > /dev/null 2>&1; then
+  if curl -s "http://127.0.0.1:${local_port}/health" > /dev/null 2>&1; then
     READY=true
     break
   fi
