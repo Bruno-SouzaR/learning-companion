@@ -124,7 +124,16 @@ RULES & CONSTRAINTS:
    - If the source compares mechanisms, include a markdown table "| Mecanismo | Vantagens | Desvantagens |".
 4. CODE BLOCKS MUST always be closed with three backticks; never inline backticks colocated with text.
 5. NEVER merge, group, or skip technical engineering concepts listed by the source. Expand ALL of them.
-6. IGNORE EDITORIAL & BIBLIOGRAPHIC SECTIONS: NEVER synthesize subtopics, definitions, or examples for "Referências Bibliográficas", "Bibliografia", "Explore+", "Saiba Mais", "Fontes", or review question evaluation headers. Completely omit these non-conceptual sections.`;
+6. IGNORE TEXTBOOK EVALUATIONS, QUIZZES & BIBLIOGRAPHY:
+   NEVER synthesize or include textbook multiple-choice questions, self-assessment boxes, exercises, or answer keys.
+   Explicitly OMIT and SKIP sections titled:
+   - "Verificando o Aprendizado" / "Verificação de Aprendizado"
+   - "Atividades de Autoavaliação" / "Autoavaliação"
+   - "Exercícios Propostos" / "Questões do Livro"
+   - "Gabarito" / "Gabarito Comentado" / "Alternativas A, B, C, D"
+   - "Referências Bibliográficas" / "Bibliografia" / "Explore+" / "Saiba Mais" / "Fontes"
+   Do NOT create subtopics, definitions, or analyses for textbook test questions.
+   Focus EXCLUSIVELY on core technical theory, architecture, engineering mechanisms, and real commands.`;
 
 /**
  * Synthesize one section of a study document as pure Markdown, extending
@@ -141,15 +150,15 @@ export async function synthesizeSection(params: {
     messages: [
       {
         role: 'system',
-        content: `${SECTION_STANDARDS_PROMPT}\nDocumento: "${params.title}" (Tema: ${params.topic}). Procesando ${
+        content: `${SECTION_STANDARDS_PROMPT}\nDocumento: "${params.title}" (Tema: ${params.topic}). Processando ${
           params.sectionIndex
         } de ${params.totalSections}.`,
       },
       { role: 'user', content: params.chunkContent },
     ],
     temperature: 0.2,
-    maxTokens: 2500,
-    maxContinuations: 3,
+    maxTokens: 1500,
+    maxContinuations: 1,
   });
 
   const parsed = parseSectionMarkdown(rawMarkdown);

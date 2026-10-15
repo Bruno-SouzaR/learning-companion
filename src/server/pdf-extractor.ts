@@ -21,6 +21,21 @@ export function estimateDocumentTokens(text: string): number {
 }
 
 /**
+ * Strip textbook self-assessment quiz boxes (e.g. "Verificando o Aprendizado",
+ * "Atividades de Autoavaliação", multiple choice questions A/B/C/D, and answer keys).
+ */
+export function stripTextbookAssessmentBlocks(text: string): string {
+  if (!text || text.trim().length === 0) return '';
+
+  return text
+    .replace(
+      /\n(?:\d+[\.\s]+)?(?:VERIFICANDO\s+O\s+APRENDIZADO|Verificando\s+o\s+Aprendizado|Verifica[cç][aã]o\s+de\s+Aprendizado|ATIVIDADES?\s+DE\s+AUTOAVALIA[CÇ][AÃ]O|Autoavalia[cç][aã]o|Exerc[íi]cios?\s+Propostos?|Gabarito(?:\s+Final|\s+Comentado)?)[\s\S]*?(?=\n#{1,2}\s+|\n(?:\d+\.\s*)?[A-Z][a-z0-9_\s]{3,}:|\n\s*---\s*\n|$)/gi,
+      '\n\n'
+    )
+    .trim();
+}
+
+/**
  * Strip trailing editorial meta-sections like Bibliografia, Referências Bibliográficas,
  * Explore+, Saiba Mais, and Book Questionnaire evaluations from the end of textbook chapters.
  */
@@ -31,7 +46,6 @@ export function stripTrailingEditorialSections(text: string): string {
 
   return text.replace(tailRegex, '').trim();
 }
-
 /**
  * Clean raw extracted PDF text: normalizes linebreaks, removes page markers,
  * collapses redundant whitespace while preserving paragraph structure and stripping
@@ -53,8 +67,8 @@ export function cleanExtractedText(rawText: string): string {
     // Replace 3+ consecutive newlines with double newlines (paragraphs)
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-
-  return stripTrailingEditorialSections(baseCleaned);
+  const withoutAssessments = stripTextbookAssessmentBlocks(baseCleaned);
+  return stripTrailingEditorialSections(withoutAssessments);
 }
 
 /**
@@ -83,11 +97,13 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<ExtractedDocum
 }
 
 /**
- * Split a large document text into semantic section chunks respecting paragraph boundaries.
+ * Split a large document text into semantic section chunks respecting paragraph boundaries,
+ * with an overlap buffer (default ~200 tokens) to ensure semantic continuity between sections.
  */
 export function chunkTextBySections(
   text: string,
-  maxTokensPerChunk = 4000
+  maxTokensPerChunk = 2400,
+  overlapTokens = 200
 ): DocumentChunk[] {
   const cleaned = cleanExtractedText(text);
   if (!cleaned) return [];
@@ -130,8 +146,23 @@ export function chunkTextBySections(
         content: chunkContent,
         estimatedTokens: estimateDocumentTokens(chunkContent),
       });
-      currentChunkParagraphs = [para];
-      currentTokens = paraTokens;
+
+      // Calculate overlap paragraphs from the tail of current chunk
+      const overlapParas: string[] = [];
+      let overlapCount = 0;
+      for (let i = currentChunkParagraphs.length - 1; i >= 0; i--) {
+        const p = currentChunkParagraphs[i];
+        const pTok = estimateDocumentTokens(p);
+        if (overlapCount + pTok <= overlapTokens) {
+          overlapParas.unshift(p);
+          overlapCount += pTok;
+        } else {
+          break;
+        }
+      }
+
+      currentChunkParagraphs = [...overlapParas, para];
+      currentTokens = overlapCount + paraTokens;
     } else {
       currentChunkParagraphs.push(para);
       currentTokens += paraTokens;

@@ -26,5 +26,7 @@ export function sanitizePortugueseMarkdown(text: string): string {
     .replace(/\bPontos\s+Clave\b/gi, 'Pontos Nucleares')
     .replace(/\bResumen\s+Estructurado\b/gi, 'Resumo Estruturado')
     // Defensively strip leaked bibliography and Explore+ subtopics
-    .replace(/\n#{1,4}\s*(?:Refer[êe]ncias\s+Bibliogr[áa]ficas|Bibliografia|Explore\+|Saiba\s+Mais|Fontes)[\s\S]*?(?=\n#{1,3}\s|\n\s*---\s*\n|$)/gi, '');
+    .replace(/\n#{1,4}\s*(?:Refer[êe]ncias\s+Bibliogr[áa]ficas|Bibliografia|Explore\+|Saiba\s+Mais|Fontes)[\s\S]*?(?=\n#{1,3}\s|\n\s*---\s*\n|$)/gi, '')
+    // Defensively strip leaked textbook assessment questions, answer choices, and gabaritos
+    .replace(/\n#{1,4}\s*(?:Verificando\s+o\s+Aprendizado|Verifica[cç][aã]o\s+de\s+Aprendizado|Atividades?\s+de\s+Autoavalia[cç][aã]o|Autoavalia[cç][aã]o|Exerc[íi]cios?\s+Propostos?|Gabarito(?:\s+Final|\s+Comentado)?)[\s\S]*?(?=\n#{1,2}\s|\n\s*---\s*\n|$)/gi, '');
 }

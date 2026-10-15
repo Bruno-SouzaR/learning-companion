@@ -27,7 +27,7 @@ declare -A MODEL_CTX=(
   ["gemma-4-e2b"]="65536"
   ["gemma-4-e4b"]="65536"
   ["qwen-2b-q5"]="8192"
-  ["qwen-2b-q8"]="4096"
+  ["qwen-2b-q8"]="16384"
   ["qwen-4b-q5"]="16384"
   ["glm-ocr"]="8192"
 )

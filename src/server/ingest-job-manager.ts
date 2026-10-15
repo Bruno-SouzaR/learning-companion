@@ -31,7 +31,7 @@ export interface IngestJob {
   updatedAt: string;
 }
 
-export const INGEST_CHUNK_TOKENS = 4800;
+export const INGEST_CHUNK_TOKENS = 2400;
 export const INGEST_RECENT_LIMIT = 3;
 const WIKI_DIR = getWikiDir();
 const STUDIES_DIR = path.join(WIKI_DIR, 'studies');
