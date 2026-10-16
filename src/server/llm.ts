@@ -43,45 +43,41 @@ async function postJson(
 
   return promise;
 }
-export const refineResultSchema = z.object({
-  title: z.string().describe('Short descriptive title in Portuguese for this practice entry'),
-  target_english: z.string().describe('Natural, idiomatic English translation'),
-  mistakes_summary: z.array(z.string()).default([]).describe('2-3 concise bullet points in Portuguese explaining grammar, prepositions, or vocabulary mistakes'),
-  key_vocabulary: z.array(
-    z.object({
-      term: z.string().describe('Phrasal verb, collocation, or key word'),
-      definition: z.string().describe('Portuguese definition and meaning'),
-    })
-  ).default([]).describe('Key vocabulary terms and their Portuguese definitions'),
-  tags: z.array(z.string()).default([]).describe('Topic and error category tags'),
-});
+export { refinePrompt, refineResultSchema, type RefineResult } from './english-coach';
 
-export type RefineResult = z.infer<typeof refineResultSchema>;
-
-const SYSTEM_PROMPT = `You are a high-level English pedagogical assistant and language coach for a Brazilian Portuguese speaker.
-Your goal is to help the user master natural, daily communication in English (casual conversations, questions, requests to AI or colleagues, context explanations with parentheses, etc.).
-
-Analyze the user's input (in Portuguese, broken English, or mixed language).
-You MUST respond with a valid JSON object strictly matching this schema:
-{
-  "title": "Short descriptive title in Portuguese",
-  "target_english": "Natural, idiomatic English sentence(s)",
-  "mistakes_summary": [
-    "Punto 1 em português explicando erro ou melhora",
-    "Punto 2 em português"
-  ],
-  "key_vocabulary": [
-    {"term": "phrasal verb or key word", "definition": "significado em português"}
-  ],
-  "tags": ["prepositions", "daily-conversation", "etc"]
+export interface ModelSamplingProfile {
+  temperature: number;
+  topP?: number;
+  topK?: number;
+  presencePenalty?: number;
+  repeatPenalty?: number;
 }
 
-Guidelines:
-- Make target_english sound natural and fluent, preserving the user's original intent and tone.
-- In mistakes_summary, be direct, encouraging, and explain the "why" in Portuguese (e.g., prepositions, false friends, word order).
-- You MUST include all keys in the JSON object: "title", "target_english", "mistakes_summary", "key_vocabulary", and "tags".
-- Output ONLY pure JSON. No markdown backticks, no conversational preamble.`;
+export const GEMMA_SAMPLING_PROFILE: ModelSamplingProfile = {
+  temperature: 0.25,
+  topP: 0.90,
+  topK: 64,
+  presencePenalty: 0.0,
+  repeatPenalty: 1.05,
+};
 
+export const QWEN_SAMPLING_PROFILE: ModelSamplingProfile = {
+  temperature: 0.7,
+  topP: 0.8,
+  topK: 20,
+  presencePenalty: 1.5,
+  repeatPenalty: 1.0,
+};
+
+export const DEFAULT_SAMPLING_PROFILE: ModelSamplingProfile = {
+  temperature: 0.2,
+};
+
+export function resolveModelSamplingProfile(modelName: string): ModelSamplingProfile {
+  if (/gemma/i.test(modelName)) return GEMMA_SAMPLING_PROFILE;
+  if (/qwen/i.test(modelName)) return QWEN_SAMPLING_PROFILE;
+  return DEFAULT_SAMPLING_PROFILE;
+}
 export interface LlmResponse {
   content: string;
   finishReason: 'stop' | 'length' | 'content_filter' | 'tool_calls' | '';
@@ -114,33 +110,26 @@ export async function requestChatCompletion(params: {
     headers['Authorization'] = `Bearer ${env.LLM_API_KEY.trim()}`;
   }
   const resolvedModel = params.model || env.LLM_MODEL;
-  const isGemma = /gemma/i.test(resolvedModel);
-  const isQwen = /qwen/i.test(resolvedModel);
+  const profile = resolveModelSamplingProfile(resolvedModel);
 
   const payload: Record<string, unknown> = {
     model: resolvedModel,
     messages: params.messages,
-    temperature:
-      params.temperature !== undefined
-        ? params.temperature
-        : isGemma
-        ? 0.25
-        : isQwen
-        ? 0.7
-        : 0.2,
+    temperature: params.temperature !== undefined ? params.temperature : profile.temperature,
   };
 
-  const topP = params.topP !== undefined ? params.topP : isGemma ? 0.90 : isQwen ? 0.8 : undefined;
+  const topP = params.topP !== undefined ? params.topP : profile.topP;
   if (topP !== undefined) payload.top_p = topP;
-  const topK = params.topK !== undefined ? params.topK : isGemma ? 64 : isQwen ? 20 : undefined;
+
+  const topK = params.topK !== undefined ? params.topK : profile.topK;
   if (topK !== undefined) payload.top_k = topK;
 
   const presencePenalty =
-    params.presencePenalty !== undefined ? params.presencePenalty : isGemma ? 0.0 : isQwen ? 1.5 : undefined;
+    params.presencePenalty !== undefined ? params.presencePenalty : profile.presencePenalty;
   if (presencePenalty !== undefined) payload.presence_penalty = presencePenalty;
 
   const repeatPenalty =
-    params.repeatPenalty !== undefined ? params.repeatPenalty : isGemma ? 1.05 : isQwen ? 1.0 : undefined;
+    params.repeatPenalty !== undefined ? params.repeatPenalty : profile.repeatPenalty;
   if (repeatPenalty !== undefined) payload.repetition_penalty = repeatPenalty;
   if (params.jsonMode) {
     payload.response_format = { type: 'json_object' };
@@ -306,24 +295,4 @@ export async function callLlmMarkdown(params: {
   }
 
   return result;
-}
-
-export async function refinePrompt(
-  rawInput: string,
-  options?: { model?: string; baseUrl?: string }
-): Promise<RefineResult> {
-  if (!rawInput || rawInput.trim().length === 0) {
-    throw new Error('Input text cannot be empty');
-  }
-
-  return callLlmJson({
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: rawInput.trim() },
-    ],
-    schema: refineResultSchema,
-    temperature: 0.2,
-    model: options?.model || getEnglishModel(),
-    baseUrl: options?.baseUrl,
-  });
 }

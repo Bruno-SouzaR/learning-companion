@@ -303,6 +303,149 @@ ${vocabSection || '- Nenhum vocabulário destacado.'}
   };
 }
 
+export interface StudySectionContent {
+  sectionIndex: number;
+  sectionTitle: string;
+  keyPoints: string[];
+  markdown: string;
+}
+
+export interface SaveStudyProgressParams {
+  id: string;
+  title: string;
+  topic: string;
+  slug: string;
+  version: number;
+  dateStr: string;
+  totalChunks: number;
+  completedChunks: number;
+  totalTokens: number;
+  sections: StudySectionContent[];
+  createdAt?: string;
+}
+
+export interface FinalizeStudyDocumentParams {
+  id: string;
+  title: string;
+  topic: string;
+  slug: string;
+  version: number;
+  dateStr: string;
+  totalChunks: number;
+  totalTokens: number;
+  sections: StudySectionContent[];
+  createdAt?: string;
+}
+
+/**
+ * Resolve next version number for a study slug based on existing entries.
+ */
+export function resolveNextStudyVersion(slug: string): number {
+  const db = getDb();
+  const existingRow = db
+    .prepare('SELECT MAX(version) as max_v FROM entries WHERE slug = ?')
+    .get(slug) as { max_v: number | null } | undefined;
+  return (existingRow?.max_v || 0) + 1;
+}
+
+/**
+ * Get standard file path for a study document version on disk.
+ */
+export function getStudyDocumentPath(slug: string, dateStr: string, version: number): string {
+  const studiesDir = path.join(WIKI_DIR, 'studies');
+  if (!fs.existsSync(studiesDir)) {
+    fs.mkdirSync(studiesDir, { recursive: true });
+  }
+  const fileName = version > 1 ? `${dateStr}-${slug}-v${version}.md` : `${dateStr}-${slug}.md`;
+  return path.join(studiesDir, fileName);
+}
+
+/**
+ * Progressively write study document markdown to disk as sections are completed.
+ */
+export function saveStudyDocumentProgress(params: SaveStudyProgressParams): string {
+  const filePath = getStudyDocumentPath(params.slug, params.dateStr, params.version);
+  const now = new Date();
+
+  const frontmatter = {
+    id: params.id,
+    title: params.title.trim(),
+    slug: params.slug,
+    version: params.version,
+    module: 'studies',
+    topic: params.topic.trim(),
+    total_chunks: params.totalChunks,
+    completed_chunks: params.completedChunks,
+    total_tokens: params.totalTokens,
+    created_at: params.createdAt || now.toISOString(),
+    updated_at: now.toISOString(),
+  };
+
+  const sectionsMarkdown = params.sections
+    .map(
+      (s) => `
+## ${s.sectionIndex}. ${s.sectionTitle}
+
+### Pontos Nucleares
+${s.keyPoints.map((kp) => `- ${kp}`).join('\n')}
+
+${s.markdown}
+`
+    )
+    .join('\n\n---\n');
+
+  const fullMarkdown = `
+# ${params.title.trim()}
+
+**Tema:** ${params.topic.trim()} &bull; **Data:** ${params.dateStr}
+
+${sectionsMarkdown}
+`.trim();
+
+  fs.writeFileSync(filePath, matter.stringify(fullMarkdown, frontmatter), 'utf-8');
+  return filePath;
+}
+
+/**
+ * Finalize study document: writes physical file, generates vector embeddings,
+ * and indexes clean markdown body into SQLite entries table.
+ */
+export async function finalizeStudyDocument(
+  params: FinalizeStudyDocumentParams
+): Promise<{ id: string; filePath: string }> {
+  const filePath = saveStudyDocumentProgress({
+    ...params,
+    completedChunks: params.totalChunks,
+  });
+
+  const fullContent = fs.readFileSync(filePath, 'utf-8');
+  const cleanBodyForDb = matter(fullContent).content.trim();
+  const textToEmbed = `${params.title} ${params.topic} ${params.sections.map((s) => s.sectionTitle).join(' ')}`;
+  const vector = await generateEmbedding(textToEmbed);
+
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT OR REPLACE INTO entries (
+      id, slug, file_path, module, title, input_pt, target_en, explanation, tags, embedding, status, version, created_at, updated_at
+    ) VALUES (?, ?, ?, 'studies', ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+  `).run(
+    params.id,
+    params.slug,
+    filePath,
+    params.title.trim(),
+    params.topic.trim(),
+    null,
+    cleanBodyForDb,
+    JSON.stringify([params.topic.toLowerCase()]),
+    vector.length > 0 ? JSON.stringify(vector) : null,
+    params.version,
+    params.createdAt || now,
+    now
+  );
+
+  return { id: params.id, filePath };
+}
 /**
  * Scan all markdown files in data/wiki and synchronize the SQLite cache.
  */

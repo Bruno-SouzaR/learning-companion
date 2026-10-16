@@ -1,10 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import matter from 'gray-matter';
 import { getDb } from './db';
 import { getWikiDir } from './paths';
-import { slugify } from './wiki-store';
-import { generateEmbedding } from './embeddings';
+import {
+  slugify,
+  resolveNextStudyVersion,
+  saveStudyDocumentProgress,
+  finalizeStudyDocument,
+} from './wiki-store';
 import { chunkTextBySections, cleanExtractedText, estimateDocumentTokens } from './pdf-extractor';
 import { synthesizeSection } from './section-synthesizer';
 import { logIngestError } from './logger';
@@ -393,18 +396,10 @@ export async function processDocumentInBackground(jobId: string, rawText: string
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
     const slug = slugify(job.title);
+    const version = resolveNextStudyVersion(slug);
+    const finalEntryId = job.entryId || `studies_${Date.now()}_${slug}`;
 
-    // Auto-detect version to generate versioned file name if previous exists
-    const existingRow = db
-      .prepare('SELECT MAX(version) as max_v FROM entries WHERE slug = ?')
-      .get(slug) as { max_v: number | null } | undefined;
-    const version = (existingRow?.max_v || 0) + 1;
-    const fileName = version > 1 ? `${dateStr}-${slug}-v${version}.md` : `${dateStr}-${slug}.md`;
-    const filePath = path.join(STUDIES_DIR, fileName);
-
-    if (!fs.existsSync(STUDIES_DIR)) {
-      fs.mkdirSync(STUDIES_DIR, { recursive: true });
-    }
+    let lastFilePath = '';
 
     for (let i = 0; i < chunks.length; i++) {
       updateJobStep(jobId, `Sintetizando conceitos da Seção ${i + 1} de ${chunks.length}...`);
@@ -430,72 +425,36 @@ export async function processDocumentInBackground(jobId: string, rawText: string
           ? `Seção ${i + 1} pronta. Iniciando Seção ${i + 2} de ${chunks.length}...`
           : 'Finalizando formatação das seções...';
       updateJobSection(jobId, sectionData, nextStep);
-      const frontmatter = {
-        id: job.entryId,
+
+      lastFilePath = saveStudyDocumentProgress({
+        id: finalEntryId,
         title: job.title,
+        topic: job.topic,
         slug,
         version,
-        module: 'studies',
-        topic: job.topic,
-        total_chunks: chunks.length,
-        completed_chunks: i + 1,
-        total_tokens: totalTokens,
-        created_at: now.toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      const sectionsMarkdown = accumulated
-        .map(
-          (s) => `
-## ${s.sectionIndex}. ${s.sectionTitle}
-
-### Pontos Nucleares
-${s.keyPoints.map((kp) => `- ${kp}`).join('\n')}
-
-${s.markdown}
-`
-        )
-        .join('\n\n---\n');
-
-      const fullMarkdown = `
-# ${job.title}
-
-**Tema:** ${job.topic} &bull; **Fecha:** ${dateStr}
-
-${sectionsMarkdown}
-`.trim();
-
-      fs.writeFileSync(filePath, matter.stringify(fullMarkdown, frontmatter), 'utf-8');
+        dateStr,
+        totalChunks: chunks.length,
+        completedChunks: i + 1,
+        totalTokens,
+        sections: accumulated,
+        createdAt: now.toISOString(),
+      });
     }
 
-// Index the consolidated document into SQLite entries table
-    const fullContent = fs.readFileSync(filePath, 'utf-8');
-    // Store only clean markdown body (strip YAML frontmatter) in the explanation column
-    const fullMarkdown = matter(fullContent).content.trim();
-    const textToEmbed = `${job.title} ${job.topic} ${accumulated.map((s) => s.sectionTitle).join(' ')}`;
-    const vector = await generateEmbedding(textToEmbed);
-
-    const finalEntryId = job.entryId || `studies_${Date.now()}_${slug}`;
-    db.prepare(`
-      INSERT OR REPLACE INTO entries (
-        id, slug, file_path, module, title, input_pt, target_en, explanation, tags, embedding, status, version, created_at, updated_at
-      ) VALUES (?, ?, ?, 'studies', ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
-    `).run(
-      finalEntryId,
+    const { filePath } = await finalizeStudyDocument({
+      id: finalEntryId,
+      title: job.title,
+      topic: job.topic,
       slug,
-      filePath,
-      job.title,
-      job.topic,
-      null,
-      fullMarkdown,
-      JSON.stringify([job.topic.toLowerCase()]),
-      vector.length > 0 ? JSON.stringify(vector) : null,
       version,
-      now.toISOString(),
-      now.toISOString()
-    );
-    updateJobStep(jobId, 'Indexando material no caderno de estudos...');
-    completeIngestJob(jobId, filePath);
+      dateStr,
+      totalChunks: chunks.length,
+      totalTokens,
+      sections: accumulated,
+      createdAt: now.toISOString(),
+    });
+
+    completeIngestJob(jobId, filePath || lastFilePath);
     updateJobStep(jobId, 'Síntese completa concluída.');
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido na síntese';

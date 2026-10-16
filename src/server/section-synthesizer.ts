@@ -1,10 +1,88 @@
 import { callLlmMarkdown } from './llm';
-import { sanitizePortugueseMarkdown, pruneDanglingMarkdownTail } from './markdown-sanitizer';
 import { getStudiesModel, getStudiesBaseUrl } from './env';
+
 export interface ParsedSection {
   sectionTitle: string;
   keyPoints: string[];
   markdown: string;
+}
+
+export interface SynthesizedSection {
+  sectionIndex: number;
+  sectionTitle: string;
+  keyPoints: string[];
+  markdown: string;
+}
+
+export interface SynthesizeSectionParams {
+  title: string;
+  topic: string;
+  sectionIndex: number;
+  totalSections: number;
+  chunkContent: string;
+}
+
+/**
+ * Defensive utility to sanitize study Markdown content,
+ * replacing residual Spanish terms with correct Brazilian Portuguese (PT-BR) terms.
+ */
+export function sanitizePortugueseMarkdown(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+
+  return text
+    // Section headers and structural concepts
+    .replace(/\bDefinici[oó]n\s+Te[oó]rica\b/gi, 'Definição Teórica')
+    .replace(/\bMecanismo\s*(?:&|y|e)\s*Aplicaci[oó]n\s+Pr[aá]ctica\b/gi, 'Mecanismo & Aplicação Prática')
+    .replace(/\bMecanismo\s*(?:&|y|e)\s*Aplica[cç][aã]o\s+Pr[aá]tica\b/gi, 'Mecanismo & Aplicação Prática')
+    .replace(/\bEjemplo\s+Pr[aá]ctico\b/gi, 'Exemplo Prático')
+    .replace(/\bEjemplo\b/gi, 'Exemplo')
+    .replace(/\bejemplo\b/g, 'exemplo')
+    .replace(/\bejemplos\b/g, 'exemplos')
+    .replace(/\bEjemplos\b/g, 'Exemplos')
+    .replace(/\bVentajas\b/gi, 'Vantagens')
+    .replace(/\bventajas\b/g, 'vantagens')
+    .replace(/\bDesventajas\b/gi, 'Desvantagens')
+    .replace(/\bdesventajas\b/g, 'desvantagens')
+    .replace(/\bSecci[oó]n\b/gi, 'Seção')
+    .replace(/\bsecci[oó]n\b/g, 'seção')
+    .replace(/\bsecciones\b/g, 'seções')
+    .replace(/\bSecciones\b/g, 'Seções')
+    .replace(/\bPontos\s+Clave\b/gi, 'Pontos Nucleares')
+    .replace(/\bResumen\s+Estructurado\b/gi, 'Resumo Estruturado')
+    // Defensively strip leaked bibliography and Explore+ subtopics
+    .replace(
+      /\n#{1,4}\s*(?:Refer[êe]ncias\s+Bibliogr[áa]ficas|Bibliografia|Explore\+|Saiba\s+Mais|Fontes)[\s\S]*?(?=\n#{1,3}\s|\n\s*---\s*\n|$)/gi,
+      ''
+    )
+    // Defensively strip leaked textbook assessment questions, answer choices, and gabaritos
+    .replace(
+      /\n#{1,4}\s*(?:Verificando\s+o\s+Aprendizado|Verifica[cç][aã]o\s+de\s+Aprendizado|Atividades?\s+de\s+Autoavalia[cç][aã]o|Autoavalia[cç][aã]o|Exerc[íi]cios?\s+Propostos?|Gabarito(?:\s+Final|\s+Comentado)?)[\s\S]*?(?=\n#{1,2}\s|\n\s*---\s*\n|$)/gi,
+      ''
+    );
+}
+
+/**
+ * Safely closes unclosed code fences and trims empty trailing bullet markers
+ * without deleting real text lines.
+ */
+export function pruneDanglingMarkdownTail(markdown: string): string {
+  if (!markdown || typeof markdown !== 'string') return '';
+  let text = markdown.trim();
+
+  // 1. Close unclosed code fences
+  const codeFenceMatches = text.match(/```/g);
+  if (codeFenceMatches && codeFenceMatches.length % 2 !== 0) {
+    text = `${text}\n\`\`\``;
+  }
+
+  // 2. Remove dangling empty bullets or headers at the very end of the text
+  const trailingDanglingRegex =
+    /(?:\n\s*[-*]\s+\*\*[^*]+\*\*:\s*|\n\s*[-*]\s+\*\*[A-Za-z0-9_]*\s*|\n\s*#{1,4}\s+[^\n]*|\n\s*[-*]\s*)$/i;
+  while (trailingDanglingRegex.test(text)) {
+    text = text.replace(trailingDanglingRegex, '').trim();
+  }
+
+  return text;
 }
 
 /**
@@ -23,8 +101,8 @@ export function parseSectionMarkdown(candidate: string): ParsedSection {
   const lines = text.split('\n');
   const DEFAULT_TITLE = 'Seção sem título';
   let sectionTitle = DEFAULT_TITLE;
-  let keyPoints: string[] = [];
-  let body: string[] = [];
+  const keyPoints: string[] = [];
+  const body: string[] = [];
   let inKeyPoints = false;
   let sawBullet = false;
 
@@ -50,7 +128,11 @@ export function parseSectionMarkdown(candidate: string): ParsedSection {
     }
 
     // "Pontos Nucleares" block header
-    if (/^#{1,3}\s+(?:[`]*)?(?:pontos?\s+(?:nucleares|clave|chave)|key\s*points|resumen\s*estructurado)/i.test(trimmed)) {
+    if (
+      /^#{1,3}\s+(?:[`]*)?(?:pontos?\s+(?:nucleares|clave|chave)|key\s*points|resumen\s*estructurado)/i.test(
+        trimmed
+      )
+    ) {
       inKeyPoints = true;
       continue;
     }
@@ -83,15 +165,12 @@ export function parseSectionMarkdown(candidate: string): ParsedSection {
 
   const markdown = body.join('\n').trim();
   const normalizedTitle = normalize(sectionTitle);
-  const markdownWithoutHeading = markdown
-    .replace(/^#+\s*.*$/m, '')
-    .trim();
+  const markdownWithoutHeading = markdown.replace(/^#+\s*.*$/m, '').trim();
 
   // If the model duplicated the heading at the top of the body, drop the duplicate.
-  const finalMarkdown =
-    normalize(markdownWithoutHeading.split('\n')[0]).includes(normalizedTitle)
-      ? markdownWithoutHeading.replace(/^[^\n]+\n/, '').trim()
-      : markdown;
+  const finalMarkdown = normalize(markdownWithoutHeading.split('\n')[0]).includes(normalizedTitle)
+    ? markdownWithoutHeading.replace(/^[^\n]+\n/, '').trim()
+    : markdown;
 
   return {
     sectionTitle,
@@ -120,17 +199,14 @@ CORE RULES:
 6. IGNORE TEXTBOOK QUIZZES: Do not include or synthesize multiple-choice test questions, self-assessments, exercises, or bibliographies.
 7. MATHEMATICAL FORMULAS & NUMERICAL CALCULATIONS:
    When the source material contains explicit formulas, performance equations, or architectural capacity limits (e.g. disk latency calculations, block addressing, pointer calculations), preserve and render them explicitly using LaTeX ($...$ or $$...$$). Do not reduce mathematical models to purely qualitative text.`;
+
 /**
- * Synthesize one section of a study document as pure Markdown, extending
- * automatically via continuation when the model hits the token cap.
+ * Deep module that transforms raw study textbook chunks into pedagogical,
+ * deeply structured Markdown in Brazilian Portuguese (PT-BR).
+ * Encapsulates prompt engineering, model transport, non-destructive tail closure,
+ * Portuguese language sanitization, and structured concept extraction behind a single interface.
  */
-export async function synthesizeSection(params: {
-  title: string;
-  topic: string;
-  sectionIndex: number;
-  totalSections: number;
-  chunkContent: string;
-}): Promise<ParsedSection> {
+export async function synthesizeStudySection(params: SynthesizeSectionParams): Promise<SynthesizedSection> {
   const rawMarkdown = await callLlmMarkdown({
     messages: [
       {
@@ -150,8 +226,11 @@ export async function synthesizeSection(params: {
   const pruned = pruneDanglingMarkdownTail(rawMarkdown);
   const sanitized = sanitizePortugueseMarkdown(pruned);
   const parsed = parseSectionMarkdown(sanitized);
-  parsed.markdown = sanitizePortugueseMarkdown(parsed.markdown);
-  parsed.keyPoints = parsed.keyPoints.map(sanitizePortugueseMarkdown);
+
+  // Keep body markdown clean (stripped of duplicate section title and duplicate Pontos Nucleares)
+  const cleanMarkdown = sanitizePortugueseMarkdown(parsed.markdown);
+  const cleanKeyPoints = parsed.keyPoints.map(sanitizePortugueseMarkdown);
+
   const cleanTitle = (parsed.sectionTitle || '').trim();
   const isGeneric =
     !cleanTitle ||
@@ -159,14 +238,25 @@ export async function synthesizeSection(params: {
     cleanTitle.startsWith('Sección sin') ||
     cleanTitle.toLowerCase() === params.title.toLowerCase();
 
+  let resolvedTitle: string;
   if (isGeneric) {
-    // Pick the first substantive ### heading if available
-    const firstSubhead = parsed.markdown.match(/^###\s+([^\n]+)/m)?.[1]?.trim();
-    parsed.sectionTitle = firstSubhead
+    const firstSubhead = cleanMarkdown.match(/^###\s+([^\n]+)/m)?.[1]?.trim();
+    resolvedTitle = firstSubhead
       ? sanitizePortugueseMarkdown(firstSubhead)
       : `Seção ${params.sectionIndex}`;
   } else {
-    parsed.sectionTitle = sanitizePortugueseMarkdown(cleanTitle);
+    resolvedTitle = sanitizePortugueseMarkdown(cleanTitle);
   }
-  return parsed;
+
+  return {
+    sectionIndex: params.sectionIndex,
+    sectionTitle: resolvedTitle,
+    keyPoints: cleanKeyPoints,
+    markdown: cleanMarkdown,
+  };
 }
+
+/**
+ * Backward compatibility alias for synthesizeStudySection.
+ */
+export const synthesizeSection = synthesizeStudySection;

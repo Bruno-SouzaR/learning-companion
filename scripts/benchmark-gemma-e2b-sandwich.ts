@@ -1,8 +1,12 @@
 import fs from 'node:fs';
 import { extractTextFromPdf, chunkTextBySections } from '../src/server/pdf-extractor';
 import { callLlmMarkdown } from '../src/server/llm';
-import { parseSectionMarkdown, SECTION_STANDARDS_PROMPT } from '../src/server/section-synthesizer';
-import { sanitizePortugueseMarkdown, pruneDanglingMarkdownTail } from '../src/server/markdown-sanitizer';
+import {
+  parseSectionMarkdown,
+  SECTION_STANDARDS_PROMPT,
+  sanitizePortugueseMarkdown,
+  pruneDanglingMarkdownTail,
+} from '../src/server/section-synthesizer';
 
 async function runBenchmark() {
   console.log('=== BENCHMARK: GEMMA 4 E2B (Q8_0) com PROMPT SANDWICH & TAIL PRUNER ===\n');

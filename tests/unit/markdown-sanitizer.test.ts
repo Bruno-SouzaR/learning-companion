@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizePortugueseMarkdown } from '@/server/markdown-sanitizer';
+import { sanitizePortugueseMarkdown } from '@/server/section-synthesizer';
 
 describe('Unit: sanitizePortugueseMarkdown', () => {
   it('replaces common Spanish section headers with Brazilian Portuguese', () => {

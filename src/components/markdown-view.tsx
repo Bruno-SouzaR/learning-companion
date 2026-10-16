@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
 import { marked, type Tokens } from 'marked';
+import { jumpToConceptHeading } from './landmark-navigation';
+
 interface MarkdownViewProps {
   content: string;
   className?: string;
@@ -89,79 +91,14 @@ export function MarkdownView({ content, className = '' }: MarkdownViewProps) {
     const bulletText = target.innerText || target.textContent || '';
 
     // Find the enclosing section or container
-    const container = target.closest('.prose') || target.closest('article') || document.body;
+    const container = (target.closest('.prose') || target.closest('article') || document.body) as HTMLElement;
 
-    // Find all concept headings appearing AFTER this list in document order
-    const allHeadings = Array.from(container.querySelectorAll<HTMLElement>('.heading-anchor, h3'));
-    const conceptHeadings = allHeadings.filter((h) => {
-      if (list.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING) {
-        const text = (h.innerText || h.textContent || '').toLowerCase();
-        return !text.includes('pontos nucleares') && h.tagName.toLowerCase() === 'h3';
-      }
-      return false;
+    jumpToConceptHeading({
+      container,
+      bulletText,
+      bulletIndex: bulletIdx,
+      totalBullets,
     });
-
-    if (conceptHeadings.length === 0) return;
-
-    const M = conceptHeadings.length;
-    const N = totalBullets;
-
-    // Monotonic sequential slice: each bullet i strictly owns a slice of concept headings
-    const startJ = Math.floor((bulletIdx * M) / N);
-    const endJ = Math.max(startJ + 1, Math.min(M, Math.ceil(((bulletIdx + 1) * M) / N)));
-    const slice = conceptHeadings.slice(startJ, endJ);
-
-    const cleanPt = (s: string) =>
-      s
-        .toLowerCase()
-        .replace(/[ç]/g, 'c')
-        .replace(/[ãáàâ]/g, 'a')
-        .replace(/[éê]/g, 'e')
-        .replace(/[íî]/g, 'i')
-        .replace(/[óõô]/g, 'o')
-        .replace(/[úû]/g, 'u')
-        .replace(/[^a-z0-9\s]/g, ' ');
-
-    const normBullet = cleanPt(bulletText);
-    let bestHeading = slice[0] || conceptHeadings[startJ] || conceptHeadings[0];
-    let bestScore = 0;
-
-    for (const h of slice) {
-      const normH = cleanPt(h.innerText || h.textContent || '');
-      const words = normH.split(/\s+/).filter((w) => w.length >= 4);
-      const matchCount = words.filter((w) => normBullet.includes(w)).length;
-
-      if (matchCount > bestScore) {
-        bestScore = matchCount;
-        bestHeading = h;
-      }
-    }
-
-    if (bestHeading) {
-      bestHeading.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      bestHeading.classList.add(
-        'ring-2',
-        'ring-indigo-400',
-        'bg-indigo-950/60',
-        'px-2.5',
-        'py-1.5',
-        'rounded-lg',
-        'shadow-lg',
-        'shadow-indigo-950/50'
-      );
-      setTimeout(() => {
-        bestHeading?.classList.remove(
-          'ring-2',
-          'ring-indigo-400',
-          'bg-indigo-950/60',
-          'px-2.5',
-          'py-1.5',
-          'rounded-lg',
-          'shadow-lg',
-          'shadow-indigo-950/50'
-        );
-      }, 2500);
-    }
   };
 
   return (

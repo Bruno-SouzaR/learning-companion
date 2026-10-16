@@ -19,6 +19,7 @@ describe('Integration: Background Processing, Continuity & Stale Recovery', () =
 
   it('processes a multi-chunk document progressively and completes with entryId', async () => {
     vi.spyOn(synthesizer, 'synthesizeSection').mockResolvedValue({
+      sectionIndex: 1,
       sectionTitle: 'Seção de Memória Caché',
       keyPoints: ['La cache evita E/S a disco'],
       markdown: 'Contenido profundo de la sección de caché.',
@@ -60,6 +61,7 @@ describe('Integration: Background Processing, Continuity & Stale Recovery', () =
   it('keeps partial sections and marks job failed on synthesis error', async () => {
     const mocked = vi.spyOn(synthesizer, 'synthesizeSection');
     mocked.mockResolvedValueOnce({
+      sectionIndex: 1,
       sectionTitle: 'Primera sección',
       keyPoints: ['Punto'],
       markdown: 'Contenido 1',
