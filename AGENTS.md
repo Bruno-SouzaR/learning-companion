@@ -70,7 +70,9 @@ src/components/active-recall.tsx (UI) ──────→ src/app/api/save/rou
 | -------------------------- | ------------------------------------------------------ |
 | Install dependencies       | `pnpm install`                                         |
 | Start dev server           | `pnpm dev`                                             |
-| Start production server    | `./start.sh` or `pnpm start`                           |
+| Start full ecosystem (Gemma 4 E4B + GLM-OCR + Web) | `./start.sh` or `pnpm run ecosystem:start` |
+| Stop ecosystem & release RAM/VRAM | `./stop.sh` or `pnpm run ecosystem:stop` |
+| Start web server standalone | `pnpm start` |
 | Build for production       | `pnpm build`                                           |
 | Typecheck (TypeScript)     | `pnpm typecheck`                                       |
 | Run test suite             | `pnpm test`                                            |
@@ -105,3 +107,4 @@ src/components/active-recall.tsx (UI) ──────→ src/app/api/save/rou
 - Never allow inherited shell environment variables to silently override the project `.env` file on disk: background daemon brokers and terminals frequently retain stale `LLM_BASE_URL` or `LLM_MODEL` exports from prior sessions. Runtime configuration modules (`src/server/env.ts`) MUST load `.env` directly from disk as the authoritative source of truth.
 - Never consider a resolved bug or unexpected behavior closed without adding a corresponding permanent regression test in `tests/regression/`.
 - Never switch, disable, or change default local LLM models without immediately auditing RAM and VRAM: never assume an old model terminated simply because a stop command was executed (systemd `Restart=always` or container PID boundaries can revive zombie runners). Always verify the retired port is dead (`curl` fails), inspect host processes via `distrobox-host-exec ps aux | grep llama-server`, and confirm `GPUActive` in `/proc/meminfo` physically released the allocated VRAM.
+- Always use the automated ecosystem scripts (`./start.sh` or `pnpm run ecosystem:start` to start; `./stop.sh` or `pnpm run ecosystem:stop` to stop) to manage project models and web runners. NEVER launch loose background runners or leave orphan llama-server processes consuming RAM/VRAM when switching tasks or projects.

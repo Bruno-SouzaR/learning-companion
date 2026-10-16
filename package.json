@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "ecosystem:start": "bash scripts/start-ecosystem.sh",
+    "ecosystem:stop": "bash scripts/stop-ecosystem.sh",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
