@@ -11,12 +11,12 @@ export const refineResultSchema = z.object({
         return val
           .split(/\n+/)
           .map((s) => s.replace(/^[-*•\d.]+\s*/, '').trim())
-          .filter((s) => s.length > 5);
+          .filter((s) => s.split(/\s+/).length >= 2);
       }
       if (Array.isArray(val)) {
         return val
-          .map((s) => String(s).trim())
-          .filter((s) => s.length > 3);
+          .map((s) => String(s).replace(/^[-*•\d.]+\s*/, '').trim())
+          .filter((s) => s.split(/\s+/).length >= 2);
       }
       return [];
     }, z.array(z.string()))

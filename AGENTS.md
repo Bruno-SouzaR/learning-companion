@@ -86,7 +86,7 @@ src/components/active-recall.tsx (UI) ──────→ src/app/api/save/rou
 3. **Mandatory Happy Path & Edge Case Coverage**: Every new feature, service module, or domain utility MUST be accompanied by comprehensive tests covering both:
    - **Happy Path**: Standard, intended operational flow.
    - **Edge Cases**: Empty or whitespace inputs, invalid boundary values, malformed payloads, unicode/accented strings, and error/exception handling.
-4. **Regression Safeguards**: Fixed bugs and user-stipulated invariants must have permanent regression tests in `tests/regression/`.
+4. **Mandatory Regression Tests for All Fixed Bugs & Anomalies**: Whenever any bug, unexpected behavior, UI truncation, model sampling collapse, or runtime anomaly is identified and resolved, a permanent regression test MUST be immediately created in `tests/regression/<descriptive-name>.test.ts`. The regression test MUST reproduce or assert the exact invariant that was previously violated (e.g. preventing single-word array collapses, preventing timeouts, enforcing non-destructive sanitization, preventing sampling penalties that corrupt JSON). A bug is considered definitively fixed ONLY after its regression test passes as part of the automated suite.
 
 ## Invariants & Prohibitions
 
@@ -103,3 +103,4 @@ src/components/active-recall.tsx (UI) ──────→ src/app/api/save/rou
 - Never use default Next.js `fetch()` without custom timeout control for local LLM completion requests: Next.js App Router bundles `@edge-runtime/primitives/fetch.js` with a hardcoded 300-second (5-minute) `UND_ERR_HEADERS_TIMEOUT`. Academic generations (>2,000 tokens at ~10-15 t/s) take 3.5 to 5.5 minutes. Always use native `node:http` with `timeout: 0` (no socket timeout) in production runtime paths, reserving `globalThis.fetch` exclusively for Vitest mock environments.
 - Never run `llama-server` on Intel Arc 140V shared-memory iGPU with multiple slots for large contexts ($\ge 8\text{k}$): always enforce `-np 1` (single slot). Multiple parallel slots multiply KV cache allocation across VRAM (e.g. 4 slots × 16k = 64k tokens / ~7.5 GB), causing memory bandwidth thrashing that drops generation speed from ~24 t/s down to ~4.8 t/s.
 - Never allow inherited shell environment variables to silently override the project `.env` file on disk: background daemon brokers and terminals frequently retain stale `LLM_BASE_URL` or `LLM_MODEL` exports from prior sessions. Runtime configuration modules (`src/server/env.ts`) MUST load `.env` directly from disk as the authoritative source of truth.
+- Never consider a resolved bug or unexpected behavior closed without adding a corresponding permanent regression test in `tests/regression/`.
