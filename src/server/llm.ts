@@ -62,11 +62,11 @@ export const GEMMA_SAMPLING_PROFILE: ModelSamplingProfile = {
 };
 
 export const QWEN_SAMPLING_PROFILE: ModelSamplingProfile = {
-  temperature: 0.7,
-  topP: 0.8,
-  topK: 20,
-  presencePenalty: 1.5,
-  repeatPenalty: 1.0,
+  temperature: 0.2,
+  topP: 0.90,
+  topK: 40,
+  presencePenalty: 0.0,
+  repeatPenalty: 1.05,
 };
 
 export const DEFAULT_SAMPLING_PROFILE: ModelSamplingProfile = {
