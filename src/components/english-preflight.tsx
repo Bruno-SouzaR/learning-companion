@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, Loader2, ArrowRight } from 'lucide-react';
 import type { RefineResult } from '@/server/llm';
 
@@ -17,7 +17,28 @@ export function EnglishPreFlight({
 }: EnglishPreFlightProps) {
   const [inputText, setInputText] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
+  const COACH_STEPS = [
+    'Analisando o contexto da comunicação...',
+    'Mapeando vícios de linguagem e expressões literais do português...',
+    'Estruturando concordância verbal e tempos gramaticais...',
+    'Lapidando a frase para a cadência natural de um nativo...',
+    'Sintetizando vocabulário técnico e expressões idiomáticas...',
+  ];
+
+  useEffect(() => {
+    if (!isLoading) {
+      setCurrentStepIndex(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setCurrentStepIndex((prev) => (prev + 1) % COACH_STEPS.length);
+    }, 3200);
+
+    return () => clearInterval(interval);
+  }, [isLoading, COACH_STEPS.length]);
   async function handleRefine() {
     if (!inputText.trim() || isLoading) return;
 
@@ -75,12 +96,34 @@ export function EnglishPreFlight({
         disabled={isLoading}
       />
 
+      {isLoading && (
+        <div className="mt-4 p-4 rounded-xl bg-slate-950/80 border border-indigo-900/50 space-y-3 animate-pulse">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+              Coach de Comunicação Nativa:
+            </span>
+            <span className="text-[11px] font-mono text-slate-400">
+              Etapa {currentStepIndex + 1} de {COACH_STEPS.length}
+            </span>
+          </div>
+          <p className="text-sm font-medium text-slate-200 transition-all duration-300 min-h-[24px]">
+            {COACH_STEPS[currentStepIndex]}
+          </p>
+          <div className="w-full bg-slate-800/60 h-1.5 rounded-full overflow-hidden">
+            <div
+              className="bg-indigo-500 h-full transition-all duration-500 rounded-full"
+              style={{ width: `${((currentStepIndex + 1) / COACH_STEPS.length) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {errorMessage && (
         <div className="mt-3 p-3 rounded-lg bg-rose-950/40 border border-rose-800/60 text-rose-300 text-sm">
           <strong>Atenção:</strong> {errorMessage}
         </div>
       )}
-
       <div className="mt-4 flex items-center justify-between">
         <span className="text-xs text-slate-400">
           Usa LLM local ou Groq configurada no seu <code className="text-indigo-400 font-mono">.env</code>

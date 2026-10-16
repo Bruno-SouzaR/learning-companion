@@ -3,10 +3,11 @@ import path from 'node:path';
 import { z } from 'zod';
 
 const envSchema = z.object({
-  LLM_BASE_URL: z.string().default('http://127.0.0.1:8080/v1'),
+  LLM_BASE_URL: z.string().default('http://127.0.0.1:8085/v1'),
   LLM_API_KEY: z.string().default(''),
-  LLM_MODEL: z.string().default('qwen3.5:2b-q8'),
+  LLM_MODEL: z.string().default('gemma-4-e4b'),
   LLM_MODEL_ENGLISH: z.string().optional(),
+  LLM_BASE_URL_ENGLISH: z.string().optional(),
   LLM_MODEL_STUDIES: z.string().optional(),
   LLM_BASE_URL_STUDIES: z.string().optional(),
   PORT: z.coerce.number().default(3000),
@@ -45,9 +46,9 @@ export function getEnv(): Env {
     LLM_API_KEY: diskEnv.LLM_API_KEY || process.env.LLM_API_KEY,
     LLM_MODEL: diskEnv.LLM_MODEL || process.env.LLM_MODEL,
     LLM_MODEL_ENGLISH: diskEnv.LLM_MODEL_ENGLISH || process.env.LLM_MODEL_ENGLISH,
+    LLM_BASE_URL_ENGLISH: diskEnv.LLM_BASE_URL_ENGLISH || process.env.LLM_BASE_URL_ENGLISH,
     LLM_MODEL_STUDIES: diskEnv.LLM_MODEL_STUDIES || process.env.LLM_MODEL_STUDIES,
     LLM_BASE_URL_STUDIES: diskEnv.LLM_BASE_URL_STUDIES || process.env.LLM_BASE_URL_STUDIES,
-    PORT: diskEnv.PORT || process.env.PORT,
   });
 
   if (!parsed.success) {
@@ -64,6 +65,10 @@ export function getEnglishModel(): string {
   return env.LLM_MODEL_ENGLISH || env.LLM_MODEL;
 }
 
+export function getEnglishBaseUrl(): string {
+  const env = getEnv();
+  return env.LLM_BASE_URL_ENGLISH || env.LLM_BASE_URL;
+}
 export function getStudiesModel(): string {
   const env = getEnv();
   return env.LLM_MODEL_STUDIES || env.LLM_MODEL;
