@@ -4,7 +4,7 @@ The single source of truth for any AI agent working in this repository. In case 
 
 ## Stack (Do not alter without explicit instruction)
 
-Next.js `16.3.0` (App Router only) · React `19.2.8` · TypeScript `strict` · Tailwind CSS `v4` · Lucide React · `@xenova/transformers` (`all-MiniLM-L6-v2`) · `node:sqlite` (`DatabaseSync`) · Local LLM (`llama-server` / Qwen 3.5 4B Q5_K_M + GLM-OCR on Intel Arc 140V Vulkan iGPU) · Zod `3.24` · pnpm `11.11.0`
+Next.js `16.3.0` (App Router only) · React `19.2.8` · TypeScript `strict` · Tailwind CSS `v4` · Lucide React · `@xenova/transformers` (`all-MiniLM-L6-v2`) · `node:sqlite` (`DatabaseSync`) · Local LLM (`llama-server` / Gemma 4 E4B Q5_K_M + GLM-OCR on Intel Arc 140V Vulkan iGPU) · Zod `3.24` · pnpm `11.11.0`
 
 ## Architecture — Flows & Layers
 
@@ -76,7 +76,7 @@ src/components/active-recall.tsx (UI) ──────→ src/app/api/save/rou
 | Run test suite             | `pnpm test`                                            |
 | Run test suite in watch    | `pnpm test:watch`                                      |
 | Start local LLM (Vulkan)   | `systemctl --user start learning-llm.service`          |
-| Switch active model       | `pnpm run model:switch <qwen-4b-q5\|qwen-2b-q5\|glm-ocr\|gemma-4-e2b>` |
+| Switch active model       | `pnpm run model:switch <gemma-4-e4b\|glm-ocr\|gemma-4-e2b>` |
 | Check active model status  | `pnpm run model:status`                                |
 
 ## Testing Standards & Quality Gates
