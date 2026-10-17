@@ -43,13 +43,14 @@ headingRenderer.list = function (token) {
 };
 
 headingRenderer.listitem = function (item: Tokens.ListItem) {
-  const content = this.parser.parseInline(item.tokens || []);
   if (inPontosNuclearesList) {
+    const inlineContent = this.parser.parseInline(item.tokens || []);
     return `<li class="ponto-nuclear-item cursor-pointer text-slate-200 hover:text-indigo-200 hover:bg-indigo-950/40 py-1.5 px-2 rounded-lg transition-all flex items-start gap-2.5 group" title="Clique para saltar a este conceito na leitura">
   <span class="text-indigo-400 mt-0.5 shrink-0 opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all font-mono font-bold">↳</span>
-  <span>${content}</span>
+  <span>${inlineContent}</span>
 </li>\n`;
   }
+  const content = this.parser.parse(item.tokens || []);
   return `<li class="leading-relaxed">${content}</li>\n`;
 };
 
@@ -73,8 +74,13 @@ export function MarkdownView({ content, className = '' }: MarkdownViewProps) {
     try {
       return marked.parse(clean) as string;
     } catch (err) {
-      console.error('Failed to parse markdown:', err);
-      return `<p>${clean}</p>`;
+      console.error('Failed to parse markdown with custom renderer, using fallback:', err);
+      try {
+        return marked.parse(clean, { renderer: undefined }) as string;
+      } catch (fallbackErr) {
+        console.error('Standard marked fallback failed:', fallbackErr);
+        return `<p>${clean}</p>`;
+      }
     }
   }, [content]);
 
