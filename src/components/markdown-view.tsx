@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { marked, type Tokens } from 'marked';
+import katex from 'katex';
 import { jumpToConceptHeading } from './landmark-navigation';
 
 interface MarkdownViewProps {
@@ -53,6 +54,31 @@ headingRenderer.listitem = function (item: Tokens.ListItem) {
   const content = this.parser.parse(item.tokens || []);
   return `<li class="leading-relaxed">${content}</li>\n`;
 };
+/**
+ * Safely renders LaTeX mathematical notation ($...$ inline, $$...$$ block) into
+ * accessible, styled MathML and KaTeX HTML.
+ */
+function renderMathInMarkdown(content: string): string {
+  // 1. Block math: $$...$$
+  let processed = content.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
+    try {
+      return katex.renderToString(math.trim(), { displayMode: true, throwOnError: false });
+    } catch {
+      return `$$${math}$$`;
+    }
+  });
+
+  // 2. Inline math: $...$
+  processed = processed.replace(/(?<!\\)\$([^\$\n]+?)(?<!\\)\$/g, (_, math) => {
+    try {
+      return katex.renderToString(math.trim(), { displayMode: false, throwOnError: false });
+    } catch {
+      return `$${math}$`;
+    }
+  });
+
+  return processed;
+}
 
 /**
  * Configure marked renderer options for secure, well-structured output.
@@ -62,21 +88,23 @@ marked.setOptions({
   breaks: true,
   renderer: headingRenderer,
 });
+
 /**
  * Renders Markdown strings with technical aesthetic, syntax-highlight-friendly
- * code styling, and native tables matching the dark OLED design system.
+ * code styling, native tables, and KaTeX mathematical typography matching the dark OLED design system.
  */
 export function MarkdownView({ content, className = '' }: MarkdownViewProps) {
   const html = useMemo(() => {
     if (!content || !content.trim()) return '';
     // Strip leading YAML frontmatter if present so raw frontmatter never renders as text
     const clean = content.replace(/^---[\s\S]*?---\s*/m, '').trim();
+    const withMath = renderMathInMarkdown(clean);
     try {
-      return marked.parse(clean) as string;
+      return marked.parse(withMath) as string;
     } catch (err) {
       console.error('Failed to parse markdown with custom renderer, using fallback:', err);
       try {
-        return marked.parse(clean, { renderer: undefined }) as string;
+        return marked.parse(withMath, { renderer: undefined }) as string;
       } catch (fallbackErr) {
         console.error('Standard marked fallback failed:', fallbackErr);
         return `<p>${clean}</p>`;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { marked } from 'marked';
-
+import katex from 'katex';
 describe('Unit: MarkdownView Rendering Logic', () => {
   it('converts markdown headings, lists and tables into formatted HTML', () => {
     const markdown = `
@@ -36,5 +36,12 @@ describe('Unit: MarkdownView Rendering Logic', () => {
   it('handles empty input safely', () => {
     const html = marked.parse('') as string;
     expect(html).toBe('');
+  });
+
+  it('renders inline and block LaTeX formulas into KaTeX HTML', () => {
+    const formula = katex.renderToString('x_1 \\leq 100', { throwOnError: false });
+    expect(formula).toContain('katex');
+    expect(formula).toContain('x');
+    expect(formula).toContain('100');
   });
 });

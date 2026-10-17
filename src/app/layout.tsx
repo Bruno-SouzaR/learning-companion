@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
-
+import 'katex/dist/katex.min.css';
 export const metadata: Metadata = {
   title: 'Learning Companion — Personal Learning Engine',
   description: 'Local-first pedagogical platform for English communication and active study recall.',
