@@ -11,4 +11,32 @@
   .katex-mathml {
     user-select: none !important;
   }
+
+  /* Custom sleek dark scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(51, 65, 85, 0.6) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: rgba(51, 65, 85, 0.5);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(71, 85, 105, 0.8);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }

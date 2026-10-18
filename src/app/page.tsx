@@ -126,11 +126,12 @@ export default function Home() {
 
       {/* Body Area: Left Content (scrollable) + Right Integrated Sidebar (fixed) */}
       <div className="flex-1 flex w-full relative min-w-0 overflow-hidden">
-        <main
-          className={`flex-1 min-w-0 h-full overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 flex flex-col transition-all duration-300 ease-in-out ${
-            isTutorOpen ? 'max-w-none' : 'max-w-4xl xl:max-w-6xl 2xl:max-w-7xl mx-auto'
-          }`}
-        >
+        <main className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col">
+          <div
+            className={`w-full px-4 sm:px-6 py-4 sm:py-6 flex flex-col transition-all duration-300 ease-in-out ${
+              isTutorOpen ? 'max-w-none' : 'max-w-4xl xl:max-w-6xl 2xl:max-w-7xl mx-auto'
+            }`}
+          >
         {activeTab === 'english' ? (
           <div className="flex-1 flex flex-col w-full">
             {!refinedResult ? (
@@ -239,7 +240,8 @@ export default function Home() {
               setIsTutorOpen(true);
             }}
           />
-        )}
+            )}
+          </div>
         </main>
 
         {/* Integrated Right Sidebar (Below Header) */}
