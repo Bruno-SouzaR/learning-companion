@@ -29,6 +29,7 @@ interface TutorDrawerProps {
   entryId?: string | null;
   documentTitle?: string | null;
   documentTopic?: string | null;
+  onNavigateToRecords?: () => void;
 }
 
 export function TutorDrawer({
@@ -37,6 +38,7 @@ export function TutorDrawer({
   entryId,
   documentTitle,
   documentTopic,
+  onNavigateToRecords,
 }: TutorDrawerProps) {
   const [messages, setMessages] = useState<TutorMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -369,41 +371,75 @@ export function TutorDrawer({
               <p className="text-xs text-slate-400">Carregando diálogo com o tutor...</p>
             </div>
           ) : messages.length === 0 && !isStreaming ? (
-            /* Welcoming Empty State */
-            <div className="py-8 px-2 text-center space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mx-auto shadow-sm">
-                <Sparkles className="w-6 h-6" />
-              </div>
-              <div className="space-y-1.5 max-w-sm mx-auto">
-                <h4 className="text-sm font-bold text-slate-100">
-                  Pronto para sanar todas as suas dúvidas!
-                </h4>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Pergunte qualquer detalhe sobre teoremas, restrições, comandos ou formulações. O
-                  tutor responde com base estrita no material de estudo.
-                </p>
-              </div>
+            /* Context-Aware Empty State */
+            !entryId && !documentTitle ? (
+              /* No document open: Guide user clearly to open one */
+              <div className="py-12 px-4 text-center space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-600/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mx-auto shadow-sm">
+                  <BookOpen className="w-7 h-7" />
+                </div>
+                <div className="space-y-2 max-w-sm mx-auto">
+                  <h4 className="text-sm font-bold text-slate-100">
+                    Nenhum material de estudo selecionado
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Para que o Tutor possa responder com precisão máxima e sem alucinações, abra um resumo no Caderno ou inicie uma leitura na aba Estudos.
+                  </p>
+                </div>
 
-              {/* Starter Prompt Chips */}
-              <div className="pt-3 space-y-2 text-left">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pl-1">
-                  Sugestões de Perguntas:
-                </span>
-                <div className="space-y-1.5">
-                  {starterPrompts.map((prompt, idx) => (
+                {onNavigateToRecords && (
+                  <div className="pt-2">
                     <button
-                      key={idx}
                       type="button"
-                      onClick={() => handleSendMessage(prompt)}
-                      className="w-full text-left p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 hover:text-indigo-200 hover:bg-indigo-950/30 hover:border-indigo-800/40 transition-all cursor-pointer flex items-center justify-between group"
+                      onClick={() => {
+                        onClose();
+                        onNavigateToRecords();
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-all cursor-pointer"
                     >
-                      <span>{prompt}</span>
-                      <Sparkles className="w-3 h-3 text-indigo-400 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
+                      <BookOpen className="w-4 h-4" />
+                      <span>Escolher Resumo no Caderno</span>
                     </button>
-                  ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Document is active: Ready to answer doubts */
+              <div className="py-8 px-2 text-center space-y-4">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mx-auto shadow-sm">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div className="space-y-1.5 max-w-sm mx-auto">
+                  <h4 className="text-sm font-bold text-slate-100">
+                    Pronto para sanar todas as suas dúvidas!
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Pergunte qualquer detalhe sobre teoremas, restrições, comandos ou formulações. O
+                    tutor responde com base estrita no material de estudo.
+                  </p>
+                </div>
+
+                {/* Starter Prompt Chips */}
+                <div className="pt-3 space-y-2 text-left">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pl-1">
+                    Sugestões de Perguntas:
+                  </span>
+                  <div className="space-y-1.5">
+                    {starterPrompts.map((prompt, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSendMessage(prompt)}
+                        className="w-full text-left p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 hover:text-indigo-200 hover:bg-indigo-950/30 hover:border-indigo-800/40 transition-all cursor-pointer flex items-center justify-between group"
+                      >
+                        <span>{prompt}</span>
+                        <Sparkles className="w-3 h-3 text-indigo-400 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            )
           ) : (
             /* Chat Transcript */
             <>

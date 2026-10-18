@@ -32,9 +32,15 @@ interface StudyIngestProps {
   onNavigateToRecords?: () => void;
   initialEntryId?: string | null;
   onOpenTutor?: (options: { entryId?: string; documentTitle?: string; documentTopic?: string }) => void;
+  onActiveDocumentChange?: (doc: { entryId?: string; title: string; topic: string } | null) => void;
 }
 
-export function StudyIngest({ onNavigateToRecords, initialEntryId, onOpenTutor }: StudyIngestProps) {
+export function StudyIngest({
+  onNavigateToRecords,
+  initialEntryId,
+  onOpenTutor,
+  onActiveDocumentChange,
+}: StudyIngestProps) {
   // Input form state
   const [inputMode, setInputMode] = useState<'file' | 'text'>('file');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -48,9 +54,21 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId, onOpenTutor }
   // Active Job state (Progressive Ingestion)
   const [activeJob, setActiveJob] = useState<IngestJob | null>(null);
   const [pollInterval, setPollInterval] = useState<number | null>(null);
-
-  // Resume: discover in-flight or recent jobs on mount for continuity
-  const [recentJobs, setRecentJobs] = useState<Array<{ id: string; title: string; status: string; totalSections: number }>>([]);
+  const [recentJobs, setRecentJobs] = useState<
+    Array<{ id: string; title: string; status: string; totalSections: number }>
+  >([]);
+  // Notify parent page whenever active document changes so Tutor is always bound to current material
+  useEffect(() => {
+    if (activeJob) {
+      onActiveDocumentChange?.({
+        entryId: activeJob.entryId || undefined,
+        title: activeJob.title,
+        topic: activeJob.topic,
+      });
+    } else {
+      onActiveDocumentChange?.(null);
+    }
+  }, [activeJob, onActiveDocumentChange]);
 
   // Accordion state: global collapse + per-section collapse
   const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false);

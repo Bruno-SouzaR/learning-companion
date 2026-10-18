@@ -22,14 +22,24 @@ export default function Home() {
     documentTitle?: string | null;
     documentTopic?: string | null;
   }>({});
+  const [activeStudyDoc, setActiveStudyDoc] = useState<{
+    entryId?: string | null;
+    documentTitle?: string | null;
+    documentTopic?: string | null;
+  } | null>(null);
 
   const handleOpenTutor = (options?: {
     entryId?: string | null;
     documentTitle?: string | null;
     documentTopic?: string | null;
   }) => {
-    if (options) {
+    if (options && (options.entryId || options.documentTitle)) {
       setTutorContext(options);
+      setActiveStudyDoc(options);
+    } else if (activeStudyDoc) {
+      setTutorContext(activeStudyDoc);
+    } else {
+      setTutorContext({});
     }
     setIsTutorOpen(true);
   };
@@ -162,7 +172,13 @@ export default function Home() {
             )}
           </div>
         ) : activeTab === 'ingest' ? (
-          <div className="flex-1 flex flex-col w-full max-w-3xl xl:max-w-5xl 2xl:max-w-6xl mx-auto pt-[3vh] sm:pt-[4vh]">
+          <div
+            className={`flex-1 flex flex-col w-full transition-all duration-300 ease-in-out ${
+              isTutorOpen
+                ? 'max-w-none pt-[1.5vh] sm:pt-[2vh]'
+                : 'max-w-3xl xl:max-w-5xl 2xl:max-w-6xl mx-auto pt-[3vh] sm:pt-[4vh]'
+            }`}
+          >
             <div className="text-center space-y-2 mb-6">
               <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight">
                 Ingestão de Materiais &amp; PDFs
@@ -175,6 +191,19 @@ export default function Home() {
               onNavigateToRecords={() => setActiveTab('records')}
               initialEntryId={activeStudyEntryId}
               onOpenTutor={handleOpenTutor}
+              onActiveDocumentChange={(doc) => {
+                if (doc) {
+                  const ctx = {
+                    entryId: doc.entryId,
+                    documentTitle: doc.title,
+                    documentTopic: doc.topic,
+                  };
+                  setActiveStudyDoc(ctx);
+                  setTutorContext(ctx);
+                } else {
+                  setActiveStudyDoc(null);
+                }
+              }}
             />
           </div>
         ) : activeTab === 'review' ? (
@@ -204,12 +233,23 @@ export default function Home() {
               setActiveStudyEntryId(entryId);
               setActiveTab('ingest');
             }}
-            onOpenTutor={handleOpenTutor}
+            onOpenTutor={(doc) => {
+              const ctx = {
+                entryId: doc.entryId,
+                documentTitle: doc.documentTitle,
+                documentTopic: doc.documentTopic,
+              };
+              setActiveStudyDoc(ctx);
+              setTutorContext(ctx);
+              setActiveStudyEntryId(doc.entryId);
+              setActiveTab('ingest');
+              setIsTutorOpen(true);
+            }}
           />
         )}
       </main>
       {/* Floating Action Button (FAB) on the right */}
-      {!isTutorOpen && (
+      {(activeTab === 'ingest' || activeTab === 'records') && !isTutorOpen && (
         <button
           type="button"
           onClick={() => handleOpenTutor()}
@@ -229,6 +269,7 @@ export default function Home() {
         entryId={tutorContext.entryId}
         documentTitle={tutorContext.documentTitle}
         documentTopic={tutorContext.documentTopic}
+        onNavigateToRecords={() => setActiveTab('records')}
       />
 
     </div>
