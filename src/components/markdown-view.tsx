@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { marked, type Tokens } from 'marked';
 import katex from 'katex';
+import DOMPurify from 'isomorphic-dompurify';
 import { jumpToConceptHeading } from './landmark-navigation';
-
 interface MarkdownViewProps {
   content: string;
   className?: string;
@@ -54,9 +54,19 @@ headingRenderer.listitem = function (item: Tokens.ListItem) {
   const content = this.parser.parse(item.tokens || []);
   return `<li class="leading-relaxed">${content}</li>\n`;
 };
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 /**
  * Safely renders LaTeX mathematical notation ($...$ inline, $$...$$ block) into
  * accessible, styled MathML and KaTeX HTML.
+ * Uses strict boundaries to avoid false-positive matches on monetary currency (e.g. $50 a $100).
  */
 function renderMathInMarkdown(content: string): string {
   // 1. Block math: $$...$$
@@ -72,8 +82,8 @@ function renderMathInMarkdown(content: string): string {
     }
   });
 
-  // 2. Inline math: $...$
-  processed = processed.replace(/(?<!\\)\$([^\$\n]+?)(?<!\\)\$/g, (_, math) => {
+  // 2. Inline math: $...$ with non-whitespace boundaries to avoid capturing currencies
+  processed = processed.replace(/(?<!\\)\$(?!\s)([^\$\n]+?)(?<!\s)(?<!\\)\$/g, (_, math) => {
     try {
       return katex.renderToString(math.trim(), {
         displayMode: false,
@@ -107,17 +117,41 @@ export function MarkdownView({ content, className = '' }: MarkdownViewProps) {
     // Strip leading YAML frontmatter if present so raw frontmatter never renders as text
     const clean = content.replace(/^---[\s\S]*?---\s*/m, '').trim();
     const withMath = renderMathInMarkdown(clean);
+    let rawHtml = '';
     try {
-      return marked.parse(withMath) as string;
+      rawHtml = marked.parse(withMath) as string;
     } catch (err) {
       console.error('Failed to parse markdown with custom renderer, using fallback:', err);
       try {
-        return marked.parse(withMath, { renderer: undefined }) as string;
+        rawHtml = marked.parse(withMath, { renderer: undefined }) as string;
       } catch (fallbackErr) {
         console.error('Standard marked fallback failed:', fallbackErr);
-        return `<p>${clean}</p>`;
+        rawHtml = `<p>${escapeHtml(clean)}</p>`;
       }
     }
+
+    // Sanitize HTML to prevent Stored / DOM XSS while preserving KaTeX math structure
+    return DOMPurify.sanitize(rawHtml, {
+      ADD_TAGS: [
+        'math',
+        'annotation',
+        'semantics',
+        'mrow',
+        'mi',
+        'mn',
+        'mo',
+        'msup',
+        'msub',
+        'msubsup',
+        'mfrac',
+        'mover',
+        'munder',
+        'munderover',
+        'mtext',
+        'mspace',
+      ],
+      ADD_ATTR: ['aria-hidden', 'displayMode', 'xmlns', 'encoding'],
+    });
   }, [content]);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
