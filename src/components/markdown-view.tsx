@@ -62,7 +62,11 @@ function renderMathInMarkdown(content: string): string {
   // 1. Block math: $$...$$
   let processed = content.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
     try {
-      return katex.renderToString(math.trim(), { displayMode: true, throwOnError: false });
+      return katex.renderToString(math.trim(), {
+        displayMode: true,
+        output: 'html',
+        throwOnError: false,
+      });
     } catch {
       return `$$${math}$$`;
     }
@@ -71,7 +75,11 @@ function renderMathInMarkdown(content: string): string {
   // 2. Inline math: $...$
   processed = processed.replace(/(?<!\\)\$([^\$\n]+?)(?<!\\)\$/g, (_, math) => {
     try {
-      return katex.renderToString(math.trim(), { displayMode: false, throwOnError: false });
+      return katex.renderToString(math.trim(), {
+        displayMode: false,
+        output: 'html',
+        throwOnError: false,
+      });
     } catch {
       return `$${math}$`;
     }

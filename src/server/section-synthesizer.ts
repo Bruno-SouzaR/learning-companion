@@ -49,6 +49,10 @@ export function sanitizePortugueseMarkdown(text: string): string {
     .replace(/\bSecciones\b/g, 'Seções')
     .replace(/\bPontos\s+Clave\b/gi, 'Pontos Nucleares')
     .replace(/\bResumen\s+Estructurado\b/gi, 'Resumo Estruturado')
+    // Repair joined topic labels and stutters caused by continuation seams
+    .replace(/[-*]\s+\*\*[A-Za-zÀ-ÿ]{1,6}-\s*\*\*/g, '- **')
+    .replace(/(\bDefinição Teórica)\s*-\s*\*\*(Mecanismo & Aplicação Prática)/g, '$1:**\n- **$2')
+    .replace(/(\*\*(?:Definição Teórica|Mecanismo & Aplicação Prática|Exemplo Prático)\*\*):?\s*-\s*\*\*/g, '$1:\n- **')
     // Defensively strip leaked bibliography and Explore+ subtopics
     .replace(
       /\n#{1,4}\s*(?:Refer[êe]ncias\s+Bibliogr[áa]ficas|Bibliografia|Explore\+|Saiba\s+Mais|Fontes)[\s\S]*?(?=\n#{1,3}\s|\n\s*---\s*\n|$)/gi,
@@ -217,7 +221,7 @@ export async function synthesizeStudySection(params: SynthesizeSectionParams): P
       },
       { role: 'user', content: params.chunkContent },
     ],
-    maxTokens: 2500,
+    maxTokens: 3500,
     maxContinuations: 2,
     model: getStudiesModel(),
     baseUrl: getStudiesBaseUrl(),

@@ -241,6 +241,55 @@ export async function callLlmJson<T>(params: {
 }
 
 /**
+ * Safely merges a previous markdown turn with its continuation chunk,
+ * removing duplicate overlapping headers, repairing interrupted bullet prefixes,
+ * and eliminating repetition stutters at the boundary seam.
+ */
+export function mergeContinuationText(prevText: string, nextChunk: string): string {
+  if (!prevText) return nextChunk;
+  if (!nextChunk) return prevText;
+
+  // 1. Check for stuttered bullet prefix e.g. prev ended with "- **Def" and next starts with "- **Definição"
+  const partialBulletMatch = prevText.match(/[-*]\s+\*\*([A-Za-zÀ-ÿ]{1,6})$/);
+  if (partialBulletMatch) {
+    const partialWord = partialBulletMatch[1].toLowerCase();
+    const nextBulletMatch = nextChunk.trimStart().match(/^[-*]\s+\*\*([A-Za-zÀ-ÿ]+)/);
+    if (nextBulletMatch && nextBulletMatch[1].toLowerCase().startsWith(partialWord)) {
+      const strippedPrev = prevText.slice(0, prevText.lastIndexOf(partialBulletMatch[0])).trimEnd();
+      return strippedPrev + '\n' + nextChunk.trimStart();
+    }
+  }
+
+  // 2. Suffix-prefix overlap check for >= 10 characters
+  const cleanPrev = prevText.trimEnd();
+  const cleanNext = nextChunk.trimStart();
+  const maxOverlapCheck = Math.min(200, cleanPrev.length, cleanNext.length);
+  for (let len = maxOverlapCheck; len >= 10; len--) {
+    const prevSuffix = cleanPrev.slice(-len);
+    const nextPrefix = cleanNext.slice(0, len);
+    if (prevSuffix.toLowerCase() === nextPrefix.toLowerCase()) {
+      return cleanPrev + cleanNext.slice(len);
+    }
+  }
+
+  // 3. Duplicate line overlap check
+  const prevLines = cleanPrev.split('\n');
+  const nextLines = cleanNext.split('\n');
+  const lastPrevLine = prevLines[prevLines.length - 1].trim();
+  const firstNextLine = nextLines[0].trim();
+  if (
+    lastPrevLine.length > 5 &&
+    firstNextLine.length > 5 &&
+    lastPrevLine.toLowerCase() === firstNextLine.toLowerCase()
+  ) {
+    return cleanPrev + '\n' + nextLines.slice(1).join('\n');
+  }
+
+  // 4. Default: preserve clean concatenation
+  return prevText + nextChunk;
+}
+
+/**
  * Markdown completion with automatic continuation when `maxTokens` truncates output.
  * Feeds the partial assistant turn back and asks the model to keep going, so the
  * final content is never silently cut (A3).
@@ -275,7 +324,11 @@ export async function callLlmMarkdown(params: {
       repeatPenalty: params.repeatPenalty,
     });
 
-    result += response.content;
+    if (result === '') {
+      result = response.content;
+    } else {
+      result = mergeContinuationText(result, response.content);
+    }
 
     if (response.finishReason === 'length' && continuation < maxContinuations) {
       continuation++;
