@@ -53,9 +53,9 @@ export default function Home() {
     setRefinedResult(null);
   }
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
+    <div className="h-screen w-full flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
       {/* Top Header */}
-      <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur sticky top-0 z-30">
+      <header className="shrink-0 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur z-20">
         <div className="max-w-4xl xl:max-w-6xl 2xl:max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-0 sm:h-16 flex flex-col sm:flex-row items-center sm:justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center justify-between w-full sm:w-auto">
             <div className="flex items-center gap-2.5">
@@ -124,10 +124,10 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Body Area: Left Content + Right Integrated Sidebar */}
-      <div className="flex-1 flex w-full relative min-w-0 overflow-x-hidden">
+      {/* Body Area: Left Content (scrollable) + Right Integrated Sidebar (fixed) */}
+      <div className="flex-1 flex w-full relative min-w-0 overflow-hidden">
         <main
-          className={`flex-1 min-w-0 w-full px-4 sm:px-6 py-4 sm:py-6 flex flex-col transition-all duration-300 ease-in-out ${
+          className={`flex-1 min-w-0 h-full overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 flex flex-col transition-all duration-300 ease-in-out ${
             isTutorOpen ? 'max-w-none' : 'max-w-4xl xl:max-w-6xl 2xl:max-w-7xl mx-auto'
           }`}
         >

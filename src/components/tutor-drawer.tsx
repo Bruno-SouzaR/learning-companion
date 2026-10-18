@@ -270,10 +270,10 @@ export function TutorDrawer({
     <aside
       role="region"
       aria-label="Tutor de Estudos"
-      className={`fixed sm:sticky top-14 sm:top-16 right-0 bottom-0 sm:bottom-auto h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-4rem)] border-l border-slate-800/80 bg-slate-950 shadow-2xl sm:shadow-none flex flex-col shrink-0 z-20 transition-all duration-300 ease-in-out ${
+      className={`h-full shrink-0 border-l border-slate-800/80 bg-slate-950 flex flex-col transition-all duration-300 ease-in-out z-20 ${
         isOpen
-          ? 'w-full sm:w-[440px] lg:w-[480px] xl:w-[520px] 2xl:w-[560px] opacity-100 translate-x-0'
-          : 'w-0 overflow-hidden border-none opacity-0 pointer-events-none translate-x-full sm:translate-x-0'
+          ? 'w-full sm:w-[440px] lg:w-[480px] xl:w-[520px] 2xl:w-[560px] opacity-100'
+          : 'w-0 overflow-hidden border-none opacity-0 pointer-events-none'
       }`}
     >
         {/* Header */}
@@ -286,7 +286,7 @@ export function TutorDrawer({
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-slate-100 tracking-tight">Tutor Pedagógico</h3>
                 <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-semibold bg-indigo-950 text-indigo-300 border border-indigo-800/50">
-                  Gemma 4 E4B
+                  Tutor IA
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 truncate max-w-[260px] sm:max-w-[300px]">
