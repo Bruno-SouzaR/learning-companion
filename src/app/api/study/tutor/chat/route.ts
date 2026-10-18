@@ -19,6 +19,44 @@ const chatRequestSchema = z.object({
   message: z.string().trim().min(1, 'A mensagem não pode estar vazia'),
 });
 
+/**
+ * Slices the study document down to the most relevant section (~8.000 chars / ~2.000 tokens)
+ * for the user's specific question, avoiding massive multi-thousand-token prompt batches
+ * that exceed Intel Arc Vulkan fence timeouts (DeviceLostError).
+ */
+function extractRelevantStudyContext(fullText: string, query: string, maxChars = 8000): string {
+  if (!fullText || fullText.length <= maxChars) return fullText;
+  const rawSections = fullText.split(/(?=\n##\s+\d+\.)/);
+  if (rawSections.length <= 1) return fullText.slice(0, maxChars);
+
+  const cleanPt = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[ç]/g, 'c')
+      .replace(/[ãáàâ]/g, 'a')
+      .replace(/[éê]/g, 'e')
+      .replace(/[íî]/g, 'i')
+      .replace(/[óõô]/g, 'o')
+      .replace(/[úû]/g, 'u')
+      .replace(/[^a-z0-9\s]/g, ' ');
+
+  const queryWords = cleanPt(query)
+    .split(/\s+/)
+    .filter((w) => w.length >= 3);
+
+  const scoredSections = rawSections.map((sec, idx) => {
+    const normSec = cleanPt(sec.slice(0, 2000));
+    let score = 0;
+    for (const w of queryWords) {
+      if (normSec.includes(w)) score += 3;
+    }
+    return { sec, score, idx };
+  });
+
+  scoredSections.sort((a, b) => b.score - a.score);
+  const best = scoredSections[0];
+  return best ? best.sec.slice(0, maxChars) : fullText.slice(0, maxChars);
+}
 const SYSTEM_PROMPT_TEMPLATE = `You are a high-level, pedagogical Computer Science and Software Engineering tutor for a Brazilian Portuguese speaking student.
 Your mission is to clarify doubts, explain theoretical concepts, detail architectural mechanics, and work through examples with complete mathematical rigor.
 
@@ -97,12 +135,13 @@ export async function POST(request: Request) {
         content: t.content,
       }));
 
-    // 5. Construct grounded prompt
-    const systemContent = studyMaterial
-      ? `${SYSTEM_PROMPT_TEMPLATE}\n\n=== DOCUMENTO DE ESTUDO (${resolvedTitle} - ${resolvedTopic}) ===\n${studyMaterial.slice(
-          0,
-          24000
-        )}`
+    // 5. Construct grounded prompt with focused context to prevent GPU timeout
+    const focusedContext = studyMaterial
+      ? extractRelevantStudyContext(studyMaterial, message, 8000)
+      : '';
+
+    const systemContent = focusedContext
+      ? `${SYSTEM_PROMPT_TEMPLATE}\n\n=== DOCUMENTO DE ESTUDO (${resolvedTitle} - ${resolvedTopic}) ===\n${focusedContext}`
       : SYSTEM_PROMPT_TEMPLATE;
 
     const messages = [
@@ -130,10 +169,30 @@ export async function POST(request: Request) {
 
     const activeSessionId = session.id;
     let accumulatedText = '';
+    let isStreamClosed = false;
 
     const stream = new ReadableStream({
       start(controller) {
         const textEncoder = new TextEncoder();
+
+        const safeEnqueue = (data: Uint8Array) => {
+          if (!isStreamClosed) {
+            try {
+              controller.enqueue(data);
+            } catch {
+              isStreamClosed = true;
+            }
+          }
+        };
+
+        const safeClose = () => {
+          if (!isStreamClosed) {
+            isStreamClosed = true;
+            try {
+              controller.close();
+            } catch {}
+          }
+        };
 
         // Send initial metadata event with session and user turn
         const initData = JSON.stringify({
@@ -141,8 +200,7 @@ export async function POST(request: Request) {
           sessionId: activeSessionId,
           userTurnId: userTurn.id,
         });
-        controller.enqueue(textEncoder.encode(`data: ${initData}\n\n`));
-
+        safeEnqueue(textEncoder.encode(`data: ${initData}\n\n`));
         const req = client.request(
           url,
           {
@@ -180,7 +238,7 @@ export async function POST(request: Request) {
                       type: 'chunk',
                       content: tokenText,
                     });
-                    controller.enqueue(textEncoder.encode(`data: ${ssePayload}\n\n`));
+                    safeEnqueue(textEncoder.encode(`data: ${ssePayload}\n\n`));
                   }
                 } catch {
                   // Ignore JSON parse errors on malformed stream chunks
@@ -201,12 +259,12 @@ export async function POST(request: Request) {
                     assistantTurnId: assistantTurn.id,
                     totalText: accumulatedText.trim(),
                   });
-                  controller.enqueue(textEncoder.encode(`data: ${donePayload}\n\n`));
+                  safeEnqueue(textEncoder.encode(`data: ${donePayload}\n\n`));
                 } catch (saveErr) {
                   console.error('Failed to save assistant turn to database:', saveErr);
                 }
               }
-              controller.close();
+              safeClose();
             });
           }
         );
@@ -217,12 +275,15 @@ export async function POST(request: Request) {
             type: 'error',
             error: err.message || 'Erro durante a transmissão de resposta',
           });
-          controller.enqueue(textEncoder.encode(`data: ${errorPayload}\n\n`));
-          controller.close();
+          safeEnqueue(textEncoder.encode(`data: ${errorPayload}\n\n`));
+          safeClose();
         });
 
         req.write(postData);
         req.end();
+      },
+      cancel() {
+        isStreamClosed = true;
       },
     });
 
