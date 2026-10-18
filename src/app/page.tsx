@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Sparkles, BookOpen, GraduationCap, Flame, FileText } from 'lucide-react';
+import { Sparkles, BookOpen, GraduationCap, Flame, FileText, Bot } from 'lucide-react';
 import { EnglishPreFlight } from '@/components/english-preflight';
 import { ActiveRecall } from '@/components/active-recall';
 import { StudyRecords } from '@/components/study-records';
 import { DailyReview } from '@/components/daily-review';
 import { StudyIngest } from '@/components/study-ingest';
+import { TutorDrawer } from '@/components/tutor-drawer';
 import type { RefineResult } from '@/server/llm';
 
 export default function Home() {
@@ -15,6 +16,23 @@ export default function Home() {
   const [refinedResult, setRefinedResult] = useState<RefineResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeStudyEntryId, setActiveStudyEntryId] = useState<string | null>(null);
+  const [isTutorOpen, setIsTutorOpen] = useState(false);
+  const [tutorContext, setTutorContext] = useState<{
+    entryId?: string | null;
+    documentTitle?: string | null;
+    documentTopic?: string | null;
+  }>({});
+
+  const handleOpenTutor = (options?: {
+    entryId?: string | null;
+    documentTitle?: string | null;
+    documentTopic?: string | null;
+  }) => {
+    if (options) {
+      setTutorContext(options);
+    }
+    setIsTutorOpen(true);
+  };
   function handleRefined(input: string, result: RefineResult) {
     setRawInput(input);
     setRefinedResult(result);
@@ -24,7 +42,6 @@ export default function Home() {
     setRawInput(null);
     setRefinedResult(null);
   }
-
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
       {/* Top Header */}
@@ -93,6 +110,15 @@ export default function Home() {
               <BookOpen className="w-3.5 h-3.5 shrink-0" />
               <span>Caderno</span>
             </button>
+            <button
+              type="button"
+              onClick={() => handleOpenTutor()}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 sm:py-1.5 min-h-[38px] sm:min-h-0 rounded-md text-[11px] sm:text-xs font-semibold whitespace-nowrap bg-indigo-950/80 text-indigo-300 border border-indigo-700/60 hover:bg-indigo-900/60 transition-all cursor-pointer shadow-xs ml-0.5 sm:ml-1"
+              title="Abrir o Tutor IA para tirar dúvidas sobre os materiais"
+            >
+              <Bot className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span>Tutor IA</span>
+            </button>
           </nav>
         </div>
       </header>
@@ -145,6 +171,7 @@ export default function Home() {
             <StudyIngest
               onNavigateToRecords={() => setActiveTab('records')}
               initialEntryId={activeStudyEntryId}
+              onOpenTutor={handleOpenTutor}
             />
           </div>
         ) : activeTab === 'review' ? (
@@ -174,9 +201,19 @@ export default function Home() {
               setActiveStudyEntryId(entryId);
               setActiveTab('ingest');
             }}
+            onOpenTutor={handleOpenTutor}
           />
         )}
       </main>
+
+      {/* Slide-over Tutor Drawer */}
+      <TutorDrawer
+        isOpen={isTutorOpen}
+        onClose={() => setIsTutorOpen(false)}
+        entryId={tutorContext.entryId}
+        documentTitle={tutorContext.documentTitle}
+        documentTopic={tutorContext.documentTopic}
+      />
 
     </div>
   );

@@ -21,6 +21,7 @@ import {
   ChevronUp,
   X,
   CornerDownRight,
+  Bot,
 } from 'lucide-react';
 import { MarkdownView } from './markdown-view';
 import { jumpToConceptHeading } from './landmark-navigation';
@@ -30,9 +31,10 @@ import type { QuizSession, QuizEvaluationResult } from '@/server/quiz-engine';
 interface StudyIngestProps {
   onNavigateToRecords?: () => void;
   initialEntryId?: string | null;
+  onOpenTutor?: (options: { entryId?: string; documentTitle?: string; documentTopic?: string }) => void;
 }
 
-export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngestProps) {
+export function StudyIngest({ onNavigateToRecords, initialEntryId, onOpenTutor }: StudyIngestProps) {
   // Input form state
   const [inputMode, setInputMode] = useState<'file' | 'text'>('file');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -543,6 +545,23 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngest
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Ingerir Outro</span>
             </button>
+            {onOpenTutor && (
+              <button
+                type="button"
+                onClick={() =>
+                  onOpenTutor({
+                    entryId: activeJob.entryId || undefined,
+                    documentTitle: activeJob.title,
+                    documentTopic: activeJob.topic,
+                  })
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-300 bg-indigo-950/80 border border-indigo-800/60 hover:bg-indigo-900/60 transition-colors cursor-pointer shadow-xs"
+                title="Tirar dúvidas deste material com o Tutor IA"
+              >
+                <Bot className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Tutor IA</span>
+              </button>
+            )}
             {isCompleted && onNavigateToRecords && (
               <button
                 onClick={onNavigateToRecords}

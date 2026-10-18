@@ -15,6 +15,7 @@ export interface SessionCheckpoint {
 
 export interface StudySession {
   id: string;
+  entry_id?: string | null;
   title: string;
   module: 'english' | 'studies';
   topic: string;
@@ -57,11 +58,11 @@ export function createSession(params: {
   module: 'english' | 'studies';
   topic: string;
   objective: string;
+  entry_id?: string | null;
 }): StudySession {
   const db = getDb();
   const now = new Date().toISOString();
   const id = `session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
   const initialCheckpoint: SessionCheckpoint = {
     current_goal: params.objective.trim(),
     mastered_concepts: [],
@@ -74,10 +75,11 @@ export function createSession(params: {
 
   db.prepare(`
     INSERT INTO study_sessions (
-      id, title, module, topic, objective, status, checkpoint, total_turns, total_tokens, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, 'active', ?, 0, 0, ?, ?)
+      id, entry_id, title, module, topic, objective, status, checkpoint, total_turns, total_tokens, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, 0, 0, ?, ?)
   `).run(
     id,
+    params.entry_id || null,
     params.title.trim(),
     params.module,
     params.topic.trim(),
@@ -89,6 +91,7 @@ export function createSession(params: {
 
   return {
     id,
+    entry_id: params.entry_id || null,
     title: params.title.trim(),
     module: params.module,
     topic: params.topic.trim(),
@@ -102,7 +105,6 @@ export function createSession(params: {
     ended_at: null,
   };
 }
-
 /**
  * Record a dialogue turn in the active study session.
  */
@@ -398,12 +400,13 @@ export function getSession(sessionId: string): StudySession | null {
   const db = getDb();
   const row = db
     .prepare(`
-      SELECT id, title, module, topic, objective, status, checkpoint, total_turns, total_tokens, created_at, updated_at, ended_at
+      SELECT id, entry_id, title, module, topic, objective, status, checkpoint, total_turns, total_tokens, created_at, updated_at, ended_at
       FROM study_sessions
       WHERE id = ?
     `)
     .get(sessionId) as {
       id: string;
+      entry_id: string | null;
       title: string;
       module: 'english' | 'studies';
       topic: string;
@@ -443,7 +446,7 @@ export function listSessions(filters?: {
 }): StudySession[] {
   const db = getDb();
   let query = `
-    SELECT id, title, module, topic, objective, status, checkpoint, total_turns, total_tokens, created_at, updated_at, ended_at
+    SELECT id, entry_id, title, module, topic, objective, status, checkpoint, total_turns, total_tokens, created_at, updated_at, ended_at
     FROM study_sessions
   `;
   const params: string[] = [];
@@ -467,6 +470,7 @@ export function listSessions(filters?: {
 
   const rows = db.prepare(query).all(...params) as Array<{
     id: string;
+    entry_id: string | null;
     title: string;
     module: 'english' | 'studies';
     topic: string;
@@ -493,5 +497,82 @@ export function listSessions(filters?: {
       ...r,
       checkpoint: cp,
     };
+  });
+}
+
+/**
+ * Retrieve full chronological dialogue history for a session.
+ */
+export function getSessionTurns(sessionId: string): SessionTurn[] {
+  const db = getDb();
+  return db
+    .prepare(`
+      SELECT id, session_id, role, content, token_estimate, created_at
+      FROM session_turns
+      WHERE session_id = ?
+      ORDER BY created_at ASC, rowid ASC
+    `)
+    .all(sessionId) as unknown as SessionTurn[];
+}
+
+/**
+ * Find active study session associated with an entry, or create a new one.
+ */
+export function getOrCreateStudySession(params: {
+  entryId?: string;
+  title: string;
+  topic: string;
+  objective?: string;
+}): StudySession {
+  const db = getDb();
+  if (params.entryId) {
+    const row = db
+      .prepare(`
+        SELECT id, entry_id, title, module, topic, objective, status, checkpoint, total_turns, total_tokens, created_at, updated_at, ended_at
+        FROM study_sessions
+        WHERE entry_id = ? AND module = 'studies' AND status = 'active'
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `)
+      .get(params.entryId) as
+      | {
+          id: string;
+          entry_id: string | null;
+          title: string;
+          module: 'english' | 'studies';
+          topic: string;
+          objective: string;
+          status: 'active' | 'completed' | 'abandoned';
+          checkpoint: string | null;
+          total_turns: number;
+          total_tokens: number;
+          created_at: string;
+          updated_at: string;
+          ended_at: string | null;
+        }
+      | undefined;
+
+    if (row) {
+      let parsedCheckpoint: SessionCheckpoint | null = null;
+      if (row.checkpoint) {
+        try {
+          parsedCheckpoint = JSON.parse(row.checkpoint);
+        } catch {
+          parsedCheckpoint = null;
+        }
+      }
+      return {
+        ...row,
+        checkpoint: parsedCheckpoint,
+      };
+    }
+  }
+
+  return createSession({
+    entry_id: params.entryId || null,
+    title: params.title,
+    module: 'studies',
+    topic: params.topic,
+    objective: params.objective || 'Sanar dúvidas e aprofundar conceitos do material',
   });
 }

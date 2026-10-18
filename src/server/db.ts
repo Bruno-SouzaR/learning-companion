@@ -51,6 +51,7 @@ export function getDb(): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_entries_slug ON entries(slug);
     CREATE TABLE IF NOT EXISTS study_sessions (
       id TEXT PRIMARY KEY,
+      entry_id TEXT,
       title TEXT NOT NULL,
       module TEXT NOT NULL,
       topic TEXT NOT NULL,
@@ -164,10 +165,21 @@ export function getDb(): DatabaseSync {
 
   migrateEntryColumns(dbInstance);
   migrateIngestJobColumns(dbInstance);
+  migrateStudySessionColumns(dbInstance);
   migrateQuizQuestionColumns(dbInstance);
   migrateStudyQuizColumns(dbInstance);
 
   return dbInstance;
+}
+
+function migrateStudySessionColumns(db: DatabaseSync): void {
+  const columns = db.prepare('PRAGMA table_info(study_sessions)').all() as Array<{ name: string }>;
+  const names = new Set(columns.map((c) => c.name));
+
+  if (!names.has('entry_id')) {
+    db.exec(`ALTER TABLE study_sessions ADD COLUMN entry_id TEXT;`);
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_entry ON study_sessions(entry_id);`);
 }
 
 function migrateEntryColumns(db: DatabaseSync): void {

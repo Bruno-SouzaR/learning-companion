@@ -22,14 +22,16 @@ import {
   RotateCcw,
   Trash2,
   BrainCircuit,
+  Bot,
 } from 'lucide-react';
 import { MarkdownView } from './markdown-view';
 import type { StoredEntry, QuestionAttemptView } from '@/server/wiki-store';
 interface StudyRecordsProps {
   onPracticeEntry?: (entryId: string) => void;
+  onOpenTutor?: (options: { entryId: string; documentTitle: string; documentTopic: string }) => void;
 }
 
-export function StudyRecords({ onPracticeEntry }: StudyRecordsProps = {}) {
+export function StudyRecords({ onPracticeEntry, onOpenTutor }: StudyRecordsProps = {}) {
   const [query, setQuery] = useState('');
   const [entries, setEntries] = useState<StoredEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -454,6 +456,24 @@ export function StudyRecords({ onPracticeEntry }: StudyRecordsProps = {}) {
                         >
                           <BrainCircuit className="w-3.5 h-3.5 text-emerald-400" />
                           <span>Praticar</span>
+                        </button>
+                      )}
+
+                      {onOpenTutor && activeEntry.module === 'studies' && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onOpenTutor({
+                              entryId: activeEntry.id,
+                              documentTitle: activeEntry.title,
+                              documentTopic: activeEntry.tags?.[0] || 'Estudos',
+                            })
+                          }
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-300 bg-indigo-950/80 border border-indigo-800/60 hover:bg-indigo-900/60 transition-colors cursor-pointer shadow-xs"
+                          title="Tirar dúvidas deste material com o Tutor IA"
+                        >
+                          <Bot className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>Tirar Dúvida</span>
                         </button>
                       )}
                       <button
