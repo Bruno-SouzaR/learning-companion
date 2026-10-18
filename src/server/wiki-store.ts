@@ -446,6 +446,73 @@ export async function finalizeStudyDocument(
 
   return { id: params.id, filePath };
 }
+
+/**
+ * Surgically replace a single section within an existing study markdown file
+ * and re-index the updated clean body and embeddings in SQLite.
+ */
+export async function replaceStudySectionInFile(
+  filePath: string,
+  updatedSection: StudySectionContent,
+  topic: string
+): Promise<boolean> {
+  if (!fs.existsSync(filePath)) return false;
+
+  const raw = fs.readFileSync(filePath, 'utf-8');
+  const parsed = matter(raw);
+  const data = parsed.data as Record<string, unknown>;
+  const content = parsed.content;
+
+  // Split into sections by ## \d+\.
+  const sectionHeaderRegex = new RegExp(`(^|\\n)##\\s+${updatedSection.sectionIndex}\\.\\s+[^\\n]*`, 'm');
+  const match = content.match(sectionHeaderRegex);
+  if (!match || match.index === undefined) return false;
+
+  const sectionStart = match.index + (match[1] ? match[1].length : 0);
+
+  // Find where this section ends: either next section separator \n\n---\n\n## \d+\. or end of sections / ## Questões
+  const afterSection = content.slice(sectionStart);
+  const nextSectionMatch = afterSection.slice(5).match(/(\n\n---\s*\n\n##\s+|\n\n##\s+(?:Questões|Exercícios)|\n\n---\s*\n\n##\s+Questões)/i);
+
+  const sectionEnd =
+    nextSectionMatch && nextSectionMatch.index !== undefined
+      ? sectionStart + 5 + nextSectionMatch.index
+      : content.length;
+
+  const newSectionBlock = `## ${updatedSection.sectionIndex}. ${updatedSection.sectionTitle}
+
+### Pontos Nucleares
+${updatedSection.keyPoints.map((kp) => `- ${kp}`).join('\n')}
+
+${updatedSection.markdown}`;
+
+  const updatedContent = content.slice(0, sectionStart) + newSectionBlock + content.slice(sectionEnd);
+
+  data.updated_at = new Date().toISOString();
+  fs.writeFileSync(filePath, matter.stringify(updatedContent.trim(), data), 'utf-8');
+
+  // Re-index into SQLite entries table
+  const db = getDb();
+  const entryId = (data.id as string) || path.basename(filePath, '.md');
+  const cleanBody = updatedContent.trim();
+  const title = (data.title as string) || '';
+  const textToEmbed = `${title} ${topic} ${updatedSection.sectionTitle}`;
+  const vector = await generateEmbedding(textToEmbed);
+
+  db.prepare(`
+    UPDATE entries
+    SET explanation = ?, embedding = ?, updated_at = ?
+    WHERE id = ? OR file_path = ?
+  `).run(
+    cleanBody,
+    vector.length > 0 ? JSON.stringify(vector) : null,
+    new Date().toISOString(),
+    entryId,
+    filePath
+  );
+
+  return true;
+}
 /**
  * Scan all markdown files in data/wiki and synchronize the SQLite cache.
  */

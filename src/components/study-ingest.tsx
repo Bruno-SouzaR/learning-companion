@@ -53,7 +53,7 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngest
   // Accordion state: global collapse + per-section collapse
   const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false);
   const [collapsedSectionIndices, setCollapsedSectionIndices] = useState<Record<number, boolean>>({});
-  // Expanded states for quiz question cards
+  const [isRetryingSection, setIsRetryingSection] = useState<Record<number, boolean>>({});
   const [expandedQuizCardId, setExpandedQuizCardId] = useState<string | null>(null);
   // Quiz collapse state (mirrors summary collapse behavior)
   const [isQuizCollapsed, setIsQuizCollapsed] = useState(false);
@@ -380,6 +380,42 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngest
     }, 60);
   }
 
+  async function handleRetrySection(sectionIndex: number) {
+    if (!activeJob) return;
+    setIsRetryingSection((prev) => ({ ...prev, [sectionIndex]: true }));
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/study/section/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: activeJob.id, sectionIndex }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success || !json.data) {
+        throw new Error(json.error || 'Falha ao regenerar seção');
+      }
+
+      const updatedSection = json.data as CompletedSectionData;
+      setActiveJob((prev) => {
+        if (!prev) return prev;
+        const copy = [...prev.completedSections];
+        const idx = copy.findIndex((s) => s.sectionIndex === sectionIndex);
+        if (idx !== -1) {
+          copy[idx] = updatedSection;
+        } else {
+          copy.push(updatedSection);
+          copy.sort((a, b) => a.sectionIndex - b.sectionIndex);
+        }
+        return { ...prev, completedSections: copy };
+      });
+    } catch (err: unknown) {
+      console.error('Erro ao regenerar seção:', err);
+      const msg = err instanceof Error ? err.message : 'Falha ao regenerar seção';
+      setErrorMessage(`Erro ao regenerar Seção ${sectionIndex}: ${msg}`);
+    } finally {
+      setIsRetryingSection((prev) => ({ ...prev, [sectionIndex]: false }));
+    }
+  }
   async function handleSubmitQuiz(e: React.FormEvent) {
     e.preventDefault();
     if (!quizSession) return;
@@ -590,22 +626,48 @@ export function StudyIngest({ onNavigateToRecords, initialEntryId }: StudyIngest
                       </span>
                       <h4 className="text-base font-bold text-slate-100">{sec.sectionTitle}</h4>
                     </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleRetrySection(sec.sectionIndex)}
+                        disabled={isRetryingSection[sec.sectionIndex]}
+                        className="p-1 rounded text-slate-400 hover:text-indigo-300 hover:bg-slate-800/60 transition-colors cursor-pointer"
+                        title="Reanalisar e regenerar esta seção com IA"
+                        aria-label="Reanalisar e regenerar esta seção com IA"
+                      >
+                        <RotateCcw
+                          className={`w-3.5 h-3.5 ${
+                            isRetryingSection[sec.sectionIndex] ? 'animate-spin text-indigo-400' : ''
+                          }`}
+                        />
+                      </button>
 
-                    <button
-                      onClick={() => toggleSectionCollapse(sec.sectionIndex)}
-                      className="p-1 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-                      title={isSectionCollapsed ? 'Expandir seção' : 'Recolher seção'}
-                      aria-label={isSectionCollapsed ? 'Expandir seção' : 'Recolher seção'}
-                    >
-                      {isSectionCollapsed ? (
-                        <ChevronDown className="w-4 h-4" />
-                      ) : (
-                        <ChevronUp className="w-4 h-4" />
-                      )}
-                    </button>
+                      <button
+                        onClick={() => toggleSectionCollapse(sec.sectionIndex)}
+                        className="p-1 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                        title={isSectionCollapsed ? 'Expandir seção' : 'Recolher seção'}
+                        aria-label={isSectionCollapsed ? 'Expandir seção' : 'Recolher seção'}
+                      >
+                        {isSectionCollapsed ? (
+                          <ChevronDown className="w-4 h-4" />
+                        ) : (
+                          <ChevronUp className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
-                  {!isSectionCollapsed && (
+                  {isRetryingSection[sec.sectionIndex] ? (
+                    <div className="p-6 rounded-xl bg-slate-900/40 border border-indigo-500/30 border-dashed animate-pulse text-center space-y-2">
+                      <Loader2 className="w-5 h-5 text-indigo-400 animate-spin mx-auto" />
+                      <p className="text-xs font-semibold text-indigo-300">
+                        Reanalisando e regenerando Seção {sec.sectionIndex} com o Gemma 4 E4B...
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        Processando o trecho do PDF original e atualizando o material...
+                      </p>
+                    </div>
+                  ) : !isSectionCollapsed && (
                     <>
                       {sec.keyPoints && sec.keyPoints.length > 0 && (
                         <div className="bg-slate-900/70 p-4 sm:p-5 rounded-xl border border-slate-800/80 space-y-2.5">

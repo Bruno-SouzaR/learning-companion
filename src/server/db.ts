@@ -107,6 +107,7 @@ export function getDb(): DatabaseSync {
       current_step TEXT,
       started_at TEXT,
       is_dismissed INTEGER DEFAULT 0,
+      raw_chunks TEXT DEFAULT '[]',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -199,6 +200,9 @@ function migrateIngestJobColumns(db: DatabaseSync): void {
   }
   if (!names.has('is_dismissed')) {
     db.exec(`ALTER TABLE ingest_jobs ADD COLUMN is_dismissed INTEGER DEFAULT 0;`);
+  }
+  if (!names.has('raw_chunks')) {
+    db.exec(`ALTER TABLE ingest_jobs ADD COLUMN raw_chunks TEXT DEFAULT '[]';`);
   }
 }
 

@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import fs from 'node:fs';
 import { POST as handleIngest } from '@/app/api/study/ingest/route';
+import { POST as handleRetrySection } from '@/app/api/study/section/retry/route';
+import { createIngestJob } from '@/server/ingest-job-manager';
+import * as synthesizer from '@/server/section-synthesizer';
+import { getDb } from '@/server/db';
 import * as llmModule from '@/server/llm';
-
 describe('Integration: Study Ingest API Route', () => {
   const createdFiles: string[] = [];
 
@@ -87,6 +90,62 @@ describe('Integration: Study Ingest API Route', () => {
       const json = await res.json();
       expect(json.success).toBe(false);
       expect(json.error).toContain('arquivo');
+    });
+
+    it('rejects section retry requests with missing or invalid parameters with HTTP 400', async () => {
+      const req = new Request('http://localhost:3000/api/study/section/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: '', sectionIndex: 0 }),
+      });
+
+      const res = await handleRetrySection(req);
+      expect(res.status).toBe(400);
+
+      const json = await res.json();
+      expect(json.success).toBe(false);
+      expect(json.error).toBeDefined();
+    });
+
+    it('successfully retries a single section on demand and returns updated section data', async () => {
+      const db = getDb();
+      const job = createIngestJob({
+        title: 'Documento Retry Test',
+        topic: 'Test Topic',
+        totalSections: 2,
+      });
+
+      // Seed raw_chunks
+      const rawChunks = [
+        { sectionIndex: 1, content: 'Texto do chunk 1 para teste', estimatedTokens: 50 },
+        { sectionIndex: 2, content: 'Texto do chunk 2 para teste', estimatedTokens: 50 },
+      ];
+      db.prepare('UPDATE ingest_jobs SET raw_chunks = ? WHERE id = ?').run(
+        JSON.stringify(rawChunks),
+        job.id
+      );
+
+      vi.spyOn(synthesizer, 'synthesizeSection').mockResolvedValueOnce({
+        sectionIndex: 1,
+        sectionTitle: 'Seção 1 Regenerada',
+        keyPoints: ['Ponto Regenerado'],
+        markdown: '### Conteúdo Novo\n- **Definição Teórica:** Definição correta.',
+      });
+
+      const req = new Request('http://localhost:3000/api/study/section/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: job.id, sectionIndex: 1 }),
+      });
+
+      const res = await handleRetrySection(req);
+      expect(res.status).toBe(200);
+
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.data.sectionTitle).toBe('Seção 1 Regenerada');
+      expect(json.data.keyPoints).toEqual(['Ponto Regenerado']);
+      expect(json.data.markdown).toContain('Definição correta.');
     });
   });
 });

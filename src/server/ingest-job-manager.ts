@@ -7,6 +7,7 @@ import {
   resolveNextStudyVersion,
   saveStudyDocumentProgress,
   finalizeStudyDocument,
+  replaceStudySectionInFile,
 } from './wiki-store';
 import { chunkTextBySections, cleanExtractedText, estimateDocumentTokens } from './pdf-extractor';
 import { synthesizeSection } from './section-synthesizer';
@@ -32,6 +33,7 @@ export interface IngestJob {
   startedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  rawChunks?: Array<{ sectionIndex: number; content: string; estimatedTokens: number }>;
 }
 
 export const INGEST_CHUNK_TOKENS = 3500;
@@ -104,7 +106,7 @@ export function getIngestJob(jobId: string): IngestJob | null {
   const db = getDb();
   const row = db
     .prepare(`
-      SELECT id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, current_step, started_at, created_at, updated_at
+      SELECT id, title, topic, status, total_sections, completed_sections, file_path, entry_id, error_message, current_step, started_at, raw_chunks, created_at, updated_at
       FROM ingest_jobs
       WHERE id = ?
     `)
@@ -120,6 +122,7 @@ export function getIngestJob(jobId: string): IngestJob | null {
       error_message: string | null;
       current_step: string | null;
       started_at: string | null;
+      raw_chunks: string | null;
       created_at: string;
       updated_at: string;
     } | undefined;
@@ -131,6 +134,13 @@ export function getIngestJob(jobId: string): IngestJob | null {
     completed = JSON.parse(row.completed_sections);
   } catch {
     completed = [];
+  }
+
+  let rawChunks: Array<{ sectionIndex: number; content: string; estimatedTokens: number }> = [];
+  try {
+    rawChunks = JSON.parse(row.raw_chunks || '[]');
+  } catch {
+    rawChunks = [];
   }
 
   return {
@@ -147,6 +157,7 @@ export function getIngestJob(jobId: string): IngestJob | null {
     startedAt: row.started_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    rawChunks,
   };
 }
 
@@ -399,8 +410,18 @@ export async function processDocumentInBackground(jobId: string, rawText: string
     const version = resolveNextStudyVersion(slug);
     const finalEntryId = job.entryId || `studies_${Date.now()}_${slug}`;
 
-    let lastFilePath = '';
+    // Store raw chunks in database for on-demand section retry/regeneration
+    const rawChunks = chunks.map((c) => ({
+      sectionIndex: c.index + 1,
+      content: c.content,
+      estimatedTokens: c.estimatedTokens,
+    }));
+    db.prepare('UPDATE ingest_jobs SET raw_chunks = ? WHERE id = ?').run(
+      JSON.stringify(rawChunks),
+      jobId
+    );
 
+    let lastFilePath = '';
     for (let i = 0; i < chunks.length; i++) {
       updateJobStep(jobId, `Sintetizando conceitos da Seção ${i + 1} de ${chunks.length}...`);
 
@@ -465,3 +486,64 @@ export async function processDocumentInBackground(jobId: string, rawText: string
   }
 }
 
+/**
+ * Re-synthesizes and surgically updates a single section within an ingest job
+ * on demand, using the original raw chunk stored for that section.
+ */
+export async function retryIngestSection(
+  jobId: string,
+  sectionIndex: number
+): Promise<CompletedSectionData> {
+  const job = getIngestJob(jobId);
+  if (!job) {
+    throw new Error(`Job "${jobId}" não encontrado.`);
+  }
+
+  // 1. Locate raw chunk
+  const rawChunk = job.rawChunks?.find((c) => c.sectionIndex === sectionIndex);
+  if (!rawChunk || !rawChunk.content) {
+    throw new Error(
+      `Trecho original da Seção ${sectionIndex} não encontrado para o job ${jobId}.`
+    );
+  }
+
+  // 2. Synthesize using the deep section synthesizer
+  const synthesized = await synthesizeSection({
+    title: job.title,
+    topic: job.topic,
+    sectionIndex,
+    totalSections: job.totalSections,
+    chunkContent: rawChunk.content,
+  });
+
+  const updatedSectionData: CompletedSectionData = {
+    sectionIndex,
+    sectionTitle: synthesized.sectionTitle,
+    keyPoints: synthesized.keyPoints,
+    markdown: synthesized.markdown,
+  };
+
+  // 3. Update completed_sections in job
+  const existingCompleted = [...job.completedSections];
+  const idx = existingCompleted.findIndex((s) => s.sectionIndex === sectionIndex);
+  if (idx !== -1) {
+    existingCompleted[idx] = updatedSectionData;
+  } else {
+    existingCompleted.push(updatedSectionData);
+    existingCompleted.sort((a, b) => a.sectionIndex - b.sectionIndex);
+  }
+
+  const db = getDb();
+  db.prepare(`
+    UPDATE ingest_jobs
+    SET completed_sections = ?, updated_at = ?
+    WHERE id = ?
+  `).run(JSON.stringify(existingCompleted), new Date().toISOString(), jobId);
+
+  // 4. Surgically update the physical file on disk if filePath exists
+  if (job.filePath && fs.existsSync(job.filePath)) {
+    await replaceStudySectionInFile(job.filePath, updatedSectionData, job.topic);
+  }
+
+  return updatedSectionData;
+}
