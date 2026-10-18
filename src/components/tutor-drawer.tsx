@@ -265,25 +265,13 @@ export function TutorDrawer({
   ];
 
   return (
-    <>
-      {/* Backdrop */}
-      {isOpen && (
-        <div
-          onClick={onClose}
-          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-xs transition-opacity duration-300"
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Slide-over Drawer Panel */}
-      <aside
-        role="dialog"
-        aria-label="Tutor de Estudos"
-        aria-modal="true"
-        className={`fixed top-0 right-0 z-50 h-full w-full sm:w-[480px] md:w-[520px] bg-slate-950 border-l border-slate-800 shadow-2xl flex flex-col transition-transform duration-300 ease-in-out ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
+    <aside
+      role="region"
+      aria-label="Tutor de Estudos"
+      className={`fixed top-0 right-0 z-30 h-full w-full sm:w-[450px] lg:w-[480px] xl:w-[520px] 2xl:w-[560px] bg-slate-950 border-l border-slate-800 shadow-2xl flex flex-col transition-transform duration-300 ease-in-out ${
+        isOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
+      }`}
+    >
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-800/80 bg-slate-950/90 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
@@ -521,7 +509,6 @@ export function TutorDrawer({
             )}
           </div>
         </div>
-      </aside>
-    </>
+    </aside>
   );
 }
