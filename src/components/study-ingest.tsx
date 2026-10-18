@@ -563,23 +563,6 @@ export function StudyIngest({
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Ingerir Outro</span>
             </button>
-            {onOpenTutor && (
-              <button
-                type="button"
-                onClick={() =>
-                  onOpenTutor({
-                    entryId: activeJob.entryId || undefined,
-                    documentTitle: activeJob.title,
-                    documentTopic: activeJob.topic,
-                  })
-                }
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-300 bg-indigo-950/80 border border-indigo-800/60 hover:bg-indigo-900/60 transition-colors cursor-pointer shadow-xs"
-                title="Tirar dúvidas deste material com o Tutor IA"
-              >
-                <Bot className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Tutor IA</span>
-              </button>
-            )}
             {isCompleted && onNavigateToRecords && (
               <button
                 onClick={onNavigateToRecords}

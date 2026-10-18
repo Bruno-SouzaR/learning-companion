@@ -55,14 +55,8 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
       {/* Top Header */}
-      <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur sticky top-0 z-20 transition-all duration-300 ease-in-out">
-        <div
-          className={`w-full px-4 sm:px-6 py-2.5 sm:py-0 sm:h-16 flex flex-col sm:flex-row items-center sm:justify-between gap-2.5 sm:gap-4 transition-all duration-300 ease-in-out ${
-            isTutorOpen
-              ? 'max-w-none lg:mr-[480px] xl:mr-[520px] 2xl:mr-[560px]'
-              : 'max-w-4xl xl:max-w-6xl 2xl:max-w-7xl mx-auto'
-          }`}
-        >
+      <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur sticky top-0 z-30">
+        <div className="max-w-4xl xl:max-w-6xl 2xl:max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-0 sm:h-16 flex flex-col sm:flex-row items-center sm:justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center justify-between w-full sm:w-auto">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
@@ -130,14 +124,13 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Main Container */}
-      <main
-        className={`flex-1 w-full px-4 sm:px-6 py-4 sm:py-6 flex flex-col transition-all duration-300 ease-in-out ${
-          isTutorOpen
-            ? 'max-w-none lg:mr-[480px] xl:mr-[520px] 2xl:mr-[560px]'
-            : 'max-w-4xl xl:max-w-6xl 2xl:max-w-7xl mx-auto'
-        }`}
-      >
+      {/* Body Area: Left Content + Right Integrated Sidebar */}
+      <div className="flex-1 flex w-full relative min-w-0 overflow-x-hidden">
+        <main
+          className={`flex-1 min-w-0 w-full px-4 sm:px-6 py-4 sm:py-6 flex flex-col transition-all duration-300 ease-in-out ${
+            isTutorOpen ? 'max-w-none' : 'max-w-4xl xl:max-w-6xl 2xl:max-w-7xl mx-auto'
+          }`}
+        >
         {activeTab === 'english' ? (
           <div className="flex-1 flex flex-col w-full">
             {!refinedResult ? (
@@ -247,13 +240,25 @@ export default function Home() {
             }}
           />
         )}
-      </main>
+        </main>
+
+        {/* Integrated Right Sidebar (Below Header) */}
+        <TutorDrawer
+          isOpen={isTutorOpen}
+          onClose={() => setIsTutorOpen(false)}
+          entryId={tutorContext.entryId}
+          documentTitle={tutorContext.documentTitle}
+          documentTopic={tutorContext.documentTopic}
+          onNavigateToRecords={() => setActiveTab('records')}
+        />
+      </div>
+
       {/* Floating Action Button (FAB) on the right */}
       {(activeTab === 'ingest' || activeTab === 'records') && !isTutorOpen && (
         <button
           type="button"
           onClick={() => handleOpenTutor()}
-          className="fixed right-5 bottom-6 z-30 flex items-center gap-2 px-4 py-2.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-xl shadow-indigo-950/70 hover:shadow-indigo-500/30 border border-indigo-400/40 transition-all cursor-pointer group hover:scale-105 active:scale-95"
+          className="fixed right-6 bottom-6 z-20 flex items-center gap-2 px-4 py-2.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-xl shadow-indigo-950/70 hover:shadow-indigo-500/30 border border-indigo-400/40 transition-all cursor-pointer group hover:scale-105 active:scale-95"
           title="Abrir o Tutor IA para tirar dúvidas sobre os materiais"
           aria-label="Abrir o Tutor IA"
         >
@@ -261,17 +266,6 @@ export default function Home() {
           <span>Tutor IA</span>
         </button>
       )}
-
-      {/* Slide-over Tutor Drawer */}
-      <TutorDrawer
-        isOpen={isTutorOpen}
-        onClose={() => setIsTutorOpen(false)}
-        entryId={tutorContext.entryId}
-        documentTitle={tutorContext.documentTitle}
-        documentTopic={tutorContext.documentTopic}
-        onNavigateToRecords={() => setActiveTab('records')}
-      />
-
     </div>
   );
 }

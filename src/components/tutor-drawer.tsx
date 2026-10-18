@@ -270,8 +270,10 @@ export function TutorDrawer({
     <aside
       role="region"
       aria-label="Tutor de Estudos"
-      className={`fixed top-0 right-0 z-30 h-full w-full sm:w-[450px] lg:w-[480px] xl:w-[520px] 2xl:w-[560px] bg-slate-950 border-l border-slate-800 shadow-2xl flex flex-col transition-transform duration-300 ease-in-out ${
-        isOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
+      className={`fixed sm:sticky top-14 sm:top-16 right-0 bottom-0 sm:bottom-auto h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-4rem)] border-l border-slate-800/80 bg-slate-950 shadow-2xl sm:shadow-none flex flex-col shrink-0 z-20 transition-all duration-300 ease-in-out ${
+        isOpen
+          ? 'w-full sm:w-[440px] lg:w-[480px] xl:w-[520px] 2xl:w-[560px] opacity-100 translate-x-0'
+          : 'w-0 overflow-hidden border-none opacity-0 pointer-events-none translate-x-full sm:translate-x-0'
       }`}
     >
         {/* Header */}
