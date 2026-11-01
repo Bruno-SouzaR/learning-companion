@@ -43,8 +43,8 @@ case "$ACTIVE_MODEL_KEY" in
   "gemma-4-e2b"|"gemma-4-e2b-q5")
     MAIN_MODEL="$MODELS_DIR/gemma-4-E2B-it-Q8_0.gguf"
     MAIN_ALIAS="gemma-4-e2b"
-    MAIN_CTX=8192
-    MAIN_FLAGS="-np 1 -fa on -ctk q8_0 -ctv q8_0 --reasoning off --reasoning-budget 0 --temp 0.2"
+    MAIN_CTX=16384
+    MAIN_FLAGS="-np 1 -fa on -ctk q8_0 -ctv q8_0 --reasoning on --reasoning-budget 1500 --temp 0.2"
     MAIN_NAME="Gemma 4 E2B"
     ;;
   *)
