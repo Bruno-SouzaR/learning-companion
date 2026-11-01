@@ -62,6 +62,11 @@ export function sanitizePortugueseMarkdown(text: string): string {
     .replace(
       /\n#{1,4}\s*(?:Verificando\s+o\s+Aprendizado|Verifica[cç][aã]o\s+de\s+Aprendizado|Atividades?\s+de\s+Autoavalia[cç][aã]o|Autoavalia[cç][aã]o|Exerc[íi]cios?\s+Propostos?|Gabarito(?:\s+Final|\s+Comentado)?)[\s\S]*?(?=\n#{1,2}\s|\n\s*---\s*\n|$)/gi,
       ''
+    )
+    // Defensively strip leaked trailing conclusion and recap blocks (e.g. ## Conclusão, ## Conclusão Técnica)
+    .replace(
+      /\n#{1,4}\s*(?:Conclus[aã]o(?:\s+(?:T[eé]cnica|do\s+M[oó]dulo|da\s+Se[cç][aã]o|Final|\(Resumo[^\)]*\)))?|Considera[cç][oõ]es\s+Finais|Resumo\s+Final)[\s\S]*?(?=\n#{1,2}\s|\n\s*---\s*\n|$)/gi,
+      ''
     );
 }
 
@@ -179,9 +184,8 @@ export function parseSectionMarkdown(candidate: string): ParsedSection {
   };
 }
 
-export const SECTION_STANDARDS_PROMPT = `You are a distinguished academic professor and author of high-level textbook chapters in Computer Science and Software Engineering.
+export const SECTION_STANDARDS_PROMPT = `You are an expert Computer Science professor and technical reference architect specializing in deep, concept-by-concept technical reference documentation.
 Your goal is to synthesize study materials into deep, rigorously structured, highly pedagogical Markdown strictly in Brazilian Portuguese (PT-BR) with EXHAUSTIVE technical depth and ZERO omissions.
-
 CORE MANDATORY INVARIANTS:
 1. STRICT BRAZILIAN PORTUGUESE (PT-BR):
    Write all content, titles, headings, and pedagogical explanations strictly in Brazilian Portuguese.
@@ -219,7 +223,13 @@ CORE MANDATORY INVARIANTS:
 5. ZERO SUPERFICIALITY & CONSTANT RIGOR:
    - PROHIBITED: Single-sentence definitions, generic hand-waving, or cutting short on later sections.
    - Every single concept must be given the same deep academic rigor from the first to the very last line.
-   - NO META-COMMENTARY: never write conversational preambles or sign-offs (e.g. "O autor lista", "Conclusão:", "Todos os exemplos foram gerados com Ubuntu").`;
+   - NO META-COMMENTARY: never write conversational preambles (e.g. "O autor lista", "Abaixo vemos", "O documento descreve").
+
+6. ABSOLUTE BAN ON CONCLUSIONS, RECAPS, AND CLOSING REMARKS (CRITICAL INVARIANT):
+   - NEVER generate a "Conclusão", "Conclusão Técnica", "Conclusão do Módulo", "Resumo", "Considerações Finais", or any recap at the end of the section.
+   - Summarizing what you just explained is STRICTLY FORBIDDEN and wastes token budget.
+   - Every single token must be dedicated to explaining the core technical concepts themselves with maximum depth.
+   - Terminate the section immediately after the final concept's practical example or comparative table. No closing remarks, no farewells, no author signatures.`;
 /**
  * Deep module that transforms raw study textbook chunks into pedagogical,
  * deeply structured Markdown in Brazilian Portuguese (PT-BR).
