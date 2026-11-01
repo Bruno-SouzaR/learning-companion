@@ -15,7 +15,7 @@ export interface ActiveStatusBarProps {
   label?: string;
 }
 
-const BRAILLE_DOTS = ['.:', ':.', '::', '.:'];
+const CLOCKWISE_STEPS = [0, 1, 2, 3]; // 0: Top-Left, 1: Top-Right, 2: Bottom-Right, 3: Bottom-Left
 
 export function ActiveStatusBar({
   currentStep,
@@ -31,12 +31,12 @@ export function ActiveStatusBar({
   const [dotIndex, setDotIndex] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // Animated dots pulse every 350ms while active
+  // Animated 4-dot clockwise spinner every 180ms while active
   useEffect(() => {
     if (isCompleted || isFailed) return;
     const interval = setInterval(() => {
-      setDotIndex((prev) => (prev + 1) % BRAILLE_DOTS.length);
-    }, 350);
+      setDotIndex((prev) => (prev + 1) % 4);
+    }, 180);
     return () => clearInterval(interval);
   }, [isCompleted, isFailed]);
 
@@ -106,8 +106,53 @@ export function ActiveStatusBar({
               <AlertCircle className="w-3.5 h-3.5" />
             </span>
           ) : (
-            <span className="font-mono text-amber-400 font-bold px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-900/60 select-none">
-              {BRAILLE_DOTS[dotIndex]}
+            <span
+              className="inline-flex items-center justify-center p-1 rounded bg-amber-950/60 border border-amber-900/60 select-none shrink-0"
+              title="Processando..."
+              aria-label="Processando"
+            >
+              <span className="grid grid-cols-2 gap-1 w-3 h-3 items-center justify-items-center">
+                {/* 0: Top-Left */}
+                <span
+                  className={`w-1 h-1 rounded-full transition-all duration-150 ${
+                    dotIndex === 0
+                      ? 'bg-amber-300 opacity-100 scale-125 shadow-[0_0_6px_rgba(251,191,36,0.9)]'
+                      : (dotIndex + 3) % 4 === 0
+                        ? 'bg-amber-400/60 opacity-60 scale-100'
+                        : 'bg-amber-500/20 opacity-25 scale-75'
+                  }`}
+                />
+                {/* 1: Top-Right */}
+                <span
+                  className={`w-1 h-1 rounded-full transition-all duration-150 ${
+                    dotIndex === 1
+                      ? 'bg-amber-300 opacity-100 scale-125 shadow-[0_0_6px_rgba(251,191,36,0.9)]'
+                      : (dotIndex + 3) % 4 === 1
+                        ? 'bg-amber-400/60 opacity-60 scale-100'
+                        : 'bg-amber-500/20 opacity-25 scale-75'
+                  }`}
+                />
+                {/* 3: Bottom-Left (Grid Row 2, Col 1) */}
+                <span
+                  className={`w-1 h-1 rounded-full transition-all duration-150 ${
+                    dotIndex === 3
+                      ? 'bg-amber-300 opacity-100 scale-125 shadow-[0_0_6px_rgba(251,191,36,0.9)]'
+                      : (dotIndex + 3) % 4 === 3
+                        ? 'bg-amber-400/60 opacity-60 scale-100'
+                        : 'bg-amber-500/20 opacity-25 scale-75'
+                  }`}
+                />
+                {/* 2: Bottom-Right (Grid Row 2, Col 2) */}
+                <span
+                  className={`w-1 h-1 rounded-full transition-all duration-150 ${
+                    dotIndex === 2
+                      ? 'bg-amber-300 opacity-100 scale-125 shadow-[0_0_6px_rgba(251,191,36,0.9)]'
+                      : (dotIndex + 3) % 4 === 2
+                        ? 'bg-amber-400/60 opacity-60 scale-100'
+                        : 'bg-amber-500/20 opacity-25 scale-75'
+                  }`}
+                />
+              </span>
             </span>
           )}
 

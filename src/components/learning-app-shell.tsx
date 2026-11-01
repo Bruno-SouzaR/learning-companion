@@ -79,6 +79,37 @@ export function LearningAppShell() {
     documentTitle?: string | null;
     documentTopic?: string | null;
   } | null>(null);
+  const handleActiveDocumentChange = React.useCallback(
+    (doc: {
+      entryId?: string | null;
+      documentTitle?: string | null;
+      documentTopic?: string | null;
+    } | null) => {
+      setActiveStudyDoc((prev) => {
+        if (
+          prev?.entryId === doc?.entryId &&
+          prev?.documentTitle === doc?.documentTitle &&
+          prev?.documentTopic === doc?.documentTopic
+        ) {
+          return prev;
+        }
+        return doc;
+      });
+      if (doc) {
+        setTutorContext((prev) => {
+          if (
+            prev?.entryId === doc?.entryId &&
+            prev?.documentTitle === doc?.documentTitle &&
+            prev?.documentTopic === doc?.documentTopic
+          ) {
+            return prev;
+          }
+          return doc;
+        });
+      }
+    },
+    []
+  );
 
   const handleOpenTutor = (options?: {
     entryId?: string | null;
@@ -230,12 +261,7 @@ export function LearningAppShell() {
                   onNavigateToRecords={() => setActiveTab('records')}
                   initialEntryId={activeStudyEntryId}
                   onOpenTutor={handleOpenTutor}
-                  onActiveDocumentChange={(doc) => {
-                    setActiveStudyDoc(doc);
-                    if (isTutorOpen && doc) {
-                      setTutorContext(doc);
-                    }
-                  }}
+                  onActiveDocumentChange={handleActiveDocumentChange}
                 />
               </div>
             ) : activeTab === 'review' ? (

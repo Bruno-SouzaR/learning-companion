@@ -32,7 +32,7 @@ interface StudyIngestProps {
   onNavigateToRecords?: () => void;
   initialEntryId?: string | null;
   onOpenTutor?: (options: { entryId?: string; documentTitle?: string; documentTopic?: string }) => void;
-  onActiveDocumentChange?: (doc: { entryId?: string; title: string; topic: string } | null) => void;
+  onActiveDocumentChange?: (doc: { entryId?: string; documentTitle?: string; documentTopic?: string } | null) => void;
 }
 
 export function StudyIngest({
@@ -57,18 +57,22 @@ export function StudyIngest({
   const [recentJobs, setRecentJobs] = useState<
     Array<{ id: string; title: string; status: string; totalSections: number }>
   >([]);
-  // Notify parent page whenever active document changes so Tutor is always bound to current material
+  // Notify parent page only when the document identity actually changes
+  const activeDocId = activeJob?.entryId || activeJob?.id;
+  const activeDocTitle = activeJob?.title;
+  const activeDocTopic = activeJob?.topic;
+
   useEffect(() => {
-    if (activeJob) {
+    if (activeDocTitle) {
       onActiveDocumentChange?.({
-        entryId: activeJob.entryId || undefined,
-        title: activeJob.title,
-        topic: activeJob.topic,
+        entryId: activeDocId,
+        documentTitle: activeDocTitle,
+        documentTopic: activeDocTopic,
       });
     } else {
       onActiveDocumentChange?.(null);
     }
-  }, [activeJob, onActiveDocumentChange]);
+  }, [activeDocId, activeDocTitle, activeDocTopic, onActiveDocumentChange]);
 
   // Accordion state: global collapse + per-section collapse
   const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false);
