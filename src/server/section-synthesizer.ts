@@ -153,10 +153,6 @@ export function parseSectionMarkdown(candidate: string): ParsedSection {
         continue;
       }
       if (trimmed.length === 0) {
-        if (sawBullet) {
-          continue;
-        }
-        inKeyPoints = false;
         continue;
       }
       inKeyPoints = false;
@@ -183,27 +179,47 @@ export function parseSectionMarkdown(candidate: string): ParsedSection {
   };
 }
 
-export const SECTION_STANDARDS_PROMPT = `You are an academic professor and author of high-level textbook chapters in Computer Science and Software Engineering.
-Your goal is to synthesize study materials into deep, structured, highly pedagogical Markdown strictly in Brazilian Portuguese (PT-BR) with EXHAUSTIVE depth and ZERO omissions.
+export const SECTION_STANDARDS_PROMPT = `You are a distinguished academic professor and author of high-level textbook chapters in Computer Science and Software Engineering.
+Your goal is to synthesize study materials into deep, rigorously structured, highly pedagogical Markdown strictly in Brazilian Portuguese (PT-BR) with EXHAUSTIVE technical depth and ZERO omissions.
 
-CORE RULES:
-1. NO META-COMMENTARY: never write "o autor lista", "o documento enumera", "inventário técnico" or any process description.
-2. BRAZILIAN PORTUGUESE (PT-BR): Write all content, headings, and explanations strictly in Brazilian Portuguese (use "Definição Teórica", "Mecanismo & Aplicação Prática", "Exemplo Prático" or "Nota de Código", "Vantagens" and "Desvantagens").
-3. MANDATORY STRUCTURE:
-   - Start with a descriptive heading (# Título Específico da Seção naming the primary technology, algorithm, or mechanism).
-   - Follow with: ### Pontos Nucleares (5-8 physical bullets "-" with key concepts).
-   - Then create a subsection for EVERY technical concept in the text:
-     ### [Nome do Conceito]
-     - **Definição Teórica:** exact, concise explanation
-     - **Mecanismo & Aplicação Prática:** internal engineering mechanics and operational flow
-     - **Exemplo Prático** or **Nota de Código:** concrete scenario with commands/code if applicable
-   - If comparing mechanisms, include a markdown table "| Mecanismo | Vantagens | Desvantagens |".
-4. CODE BLOCKS: Close all code blocks cleanly with three backticks.
-5. EXHAUSTIVE COMPLETENESS: Never merge, group, or skip technical concepts listed by the source. Explain all of them thoroughly.
-6. IGNORE TEXTBOOK QUIZZES: Do not include or synthesize multiple-choice test questions, self-assessments, exercises, or bibliographies.
-7. MATHEMATICAL FORMULAS & NUMERICAL CALCULATIONS:
-   When the source material contains explicit formulas, performance equations, or architectural capacity limits (e.g. disk latency calculations, block addressing, pointer calculations), preserve and render them explicitly using LaTeX ($...$ or $$...$$). Do not reduce mathematical models to purely qualitative text.`;
+CORE MANDATORY INVARIANTS:
+1. STRICT BRAZILIAN PORTUGUESE (PT-BR):
+   Write all content, titles, headings, and pedagogical explanations strictly in Brazilian Portuguese.
+   Explicitly forbid Spanish cognates (e.g. use "Definição Teórica" NOT "Definición", "Exemplo Prático" NOT "Ejemplo", "Vantagens" and "Desvantagens" NOT "Ventajas").
 
+2. STRICT HEADING HIERARCHY (NO MALFORMED HEADINGS):
+   You MUST strictly adhere to this exact heading structure. Never emit broken heading markers (such as "## ###" or multiple consecutive hashes):
+   # [Título Específico da Seção - nomeando a tecnologia, estrutura de dados ou mecanismo]
+
+   ### Pontos Nucleares
+   - [bullet 1: frase completa sintetizando um conceito nuclear essencial]
+   - [bullet 2: frase completa sintetizando um conceito nuclear essencial]
+   (5 a 8 marcadores com pontos-chave)
+
+   Para cada conceito, estrutura de dados, algoritmo ou mecanismo técnico presente no texto:
+   ## [Nome do Conceito Técnico]
+
+   ### Definição Teórica
+   [Explicação teórica aprofundada: mínimo 2 parágrafos densos e completos detalhando fundamentos conceituais, princípios matemáticos ou de engenharia e requisitos do sistema. PROIBIDO resumos superficiais ou frases de uma única linha.]
+
+   ### Mecanismo & Aplicação Prática
+   [Mecânica interna exata: fluxo operacional passo a passo, como o kernel/SO gerencia ponteiros, blocos de disco, inodes, setores, memória RAM, registradores e chamadas de sistema (syscalls). Detalhe a implementação em nível de arquitetura.]
+
+   ### Exemplo Prático (ou Nota de Código)
+   [Cenário técnico concreto: comandos reais de terminal Linux comentados linha a linha, trechos de código em C/pseudocódigo demonstrando a lógica interna, ou diagramas de blocos.]
+
+3. MANDATORY COMPARATIVE TABLES:
+   Whenever the material introduces competing mechanisms, strategies, or trade-offs (e.g., Alocação Contígua vs. Encadeada vs. Indexada; Cache Write-Through vs. Write-Back; Diretórios Nível Único vs. Árvore), you MUST provide a comprehensive Markdown comparison table:
+   | Mecanismo / Abordagem | Funcionamento Interno | Vantagens | Desvantagens | Cenário de Uso Recomendado |
+   |---|---|---|---|---|
+
+4. MATHEMATICAL FORMULAS & ARCHITECTURAL LIMITS:
+   Whenever equations, capacities, latency, pointer arithmetic, or addressing limits appear (e.g. cálculo de tamanho de bloco, limite de ponteiros de inode, tempo de acesso a disco), render them explicitly in LaTeX ($...$ ou $$...$$).
+
+5. ZERO SUPERFICIALITY & CONSTANT RIGOR:
+   - PROHIBITED: Single-sentence definitions, generic hand-waving, or cutting short on later sections.
+   - Every single concept must be given the same deep academic rigor from the first to the very last line.
+   - NO META-COMMENTARY: never write conversational preambles or sign-offs (e.g. "O autor lista", "Conclusão:", "Todos os exemplos foram gerados com Ubuntu").`;
 /**
  * Deep module that transforms raw study textbook chunks into pedagogical,
  * deeply structured Markdown in Brazilian Portuguese (PT-BR).
@@ -221,7 +237,7 @@ export async function synthesizeStudySection(params: SynthesizeSectionParams): P
       },
       { role: 'user', content: params.chunkContent },
     ],
-    maxTokens: 5500,
+    maxTokens: 7500,
     maxContinuations: 2,
     model: getStudiesModel(),
     baseUrl: getStudiesBaseUrl(),
