@@ -33,9 +33,10 @@ kill_pid_file() {
 
 # 1. Kill tracked PIDs
 kill_pid_file "$RUN_DIR/web.pid" "Next.js Web Application"
+kill_pid_file "$RUN_DIR/llm.pid" "Studies LLM (Port $GEMMA_PORT)"
 kill_pid_file "$RUN_DIR/gemma.pid" "Gemma 4 E4B (Port $GEMMA_PORT)"
 kill_pid_file "$RUN_DIR/glm_ocr.pid" "GLM-OCR (Port $GLM_PORT)"
-
+systemctl --user stop learning-llm.service 2>/dev/null || true
 # 2. Force cleanup of ports if any rogue processes remained
 cleanup_port() {
   local port=$1

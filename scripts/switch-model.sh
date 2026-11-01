@@ -6,6 +6,9 @@ SERVICE_FILE="/var/home/brunosouzar/.config/systemd/user/learning-llm.service"
 ENV_FILE="$(dirname "$0")/../.env"
 
 declare -A MODEL_FILES=(
+  ["lfm3-1.7b"]="$MODELS_DIR/LFM3-1.7B-QAD-Q4_0.gguf"
+  ["lfm3-1.7b-q8"]="$MODELS_DIR/LFM3-1.7B-Q8_0.gguf"
+  ["lfm3-vl"]="$MODELS_DIR/LFM3-VL-2B-QAD-Q4_0.gguf"
   ["gemma-4-e2b"]="$MODELS_DIR/gemma-4-E2B-it-Q8_0.gguf"
   ["gemma-4-e2b-q5"]="$MODELS_DIR/gemma-4-E2B-it-Q5_K_M.gguf"
   ["gemma-4-e4b"]="$MODELS_DIR/google_gemma-4-E4B-it-Q5_K_M.gguf"
@@ -16,6 +19,9 @@ declare -A MODEL_FILES=(
 )
 
 declare -A MODEL_ALIASES=(
+  ["lfm3-1.7b"]="lfm3:1.7b-qad"
+  ["lfm3-1.7b-q8"]="lfm3:1.7b-q8"
+  ["lfm3-vl"]="lfm3-vl:2b-qad"
   ["gemma-4-e2b"]="gemma-4-e2b"
   ["gemma-4-e2b-q5"]="gemma-4-e2b"
   ["gemma-4-e4b"]="gemma-4-e4b"
@@ -26,6 +32,9 @@ declare -A MODEL_ALIASES=(
 )
 
 declare -A MODEL_CTX=(
+  ["lfm3-1.7b"]="16384"
+  ["lfm3-1.7b-q8"]="16384"
+  ["lfm3-vl"]="16384"
   ["gemma-4-e2b"]="8192"
   ["gemma-4-e2b-q5"]="8192"
   ["gemma-4-e4b"]="16384"
@@ -36,6 +45,9 @@ declare -A MODEL_CTX=(
 )
 
 declare -A MODEL_EXTRA_FLAGS=(
+  ["lfm3-1.7b"]="-np 1 -fa on --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning off --reasoning-budget 0 --no-reasoning-preserve"
+  ["lfm3-1.7b-q8"]="-np 1 -fa on --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning off --reasoning-budget 0 --no-reasoning-preserve"
+  ["lfm3-vl"]="-np 1 -fa on --mmproj $MODELS_DIR/mmproj-LFM3-VL-2B-Q8_0.gguf --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning off --reasoning-budget 0 --no-reasoning-preserve"
   ["gemma-4-e2b"]="-np 1 -fa on -ctk q8_0 -ctv q8_0"
   ["gemma-4-e2b-q5"]="-np 1 -fa on -ctk q8_0 -ctv q8_0"
   ["gemma-4-e4b"]="-np 1 -fa on -ctk q8_0 -ctv q8_0"

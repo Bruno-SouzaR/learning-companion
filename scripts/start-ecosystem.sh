@@ -10,11 +10,56 @@ mkdir -p "$RUN_DIR"
 MODELS_DIR="/var/home/brunosouzar/.local/share/models"
 LLAMA_SERVER="/var/home/brunosouzar/.local/bin/llama-server"
 
-GEMMA_MODEL="$MODELS_DIR/google_gemma-4-E4B-it-Q5_K_M.gguf"
+ACTIVE_MODEL_KEY="gemma-4-e4b"
+if [[ -f "$PROJECT_ROOT/.env" ]]; then
+  ENV_MODEL=$(grep "^LLM_MODEL=" "$PROJECT_ROOT/.env" | cut -d'=' -f2 | tr -d '"' | tr -d "'" | tr -d ' ')
+  if [[ -n "$ENV_MODEL" ]]; then
+    ACTIVE_MODEL_KEY="$ENV_MODEL"
+  fi
+fi
+
+case "$ACTIVE_MODEL_KEY" in
+  "lfm3:1.7b-qad"|"lfm3-1.7b")
+    MAIN_MODEL="$MODELS_DIR/LFM3-1.7B-QAD-Q4_0.gguf"
+    MAIN_ALIAS="lfm3:1.7b-qad"
+    MAIN_CTX=16384
+    MAIN_FLAGS="-np 1 -fa on --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning off --reasoning-budget 0 --no-reasoning-preserve"
+    MAIN_NAME="LFM3 1.7B QAD Q4"
+    ;;
+  "lfm3:1.7b-q8"|"lfm3-1.7b-q8")
+    MAIN_MODEL="$MODELS_DIR/LFM3-1.7B-Q8_0.gguf"
+    MAIN_ALIAS="lfm3:1.7b-q8"
+    MAIN_CTX=16384
+    MAIN_FLAGS="-np 1 -fa on --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning off --reasoning-budget 0 --no-reasoning-preserve"
+    MAIN_NAME="LFM3 1.7B Q8"
+    ;;
+  "lfm3-vl:2b-qad"|"lfm3-vl")
+    MAIN_MODEL="$MODELS_DIR/LFM3-VL-2B-QAD-Q4_0.gguf"
+    MAIN_ALIAS="lfm3-vl:2b-qad"
+    MAIN_CTX=16384
+    MAIN_FLAGS="-np 1 -fa on --mmproj $MODELS_DIR/mmproj-LFM3-VL-2B-Q8_0.gguf --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning off --reasoning-budget 0 --no-reasoning-preserve"
+    MAIN_NAME="LFM3-VL 2B QAD Q4"
+    ;;
+  "gemma-4-e2b"|"gemma-4-e2b-q5")
+    MAIN_MODEL="$MODELS_DIR/gemma-4-E2B-it-Q8_0.gguf"
+    MAIN_ALIAS="gemma-4-e2b"
+    MAIN_CTX=8192
+    MAIN_FLAGS="-np 1 -fa on -ctk q8_0 -ctv q8_0 --reasoning off --reasoning-budget 0 --temp 0.2"
+    MAIN_NAME="Gemma 4 E2B"
+    ;;
+  *)
+    MAIN_MODEL="$MODELS_DIR/google_gemma-4-E4B-it-Q5_K_M.gguf"
+    MAIN_ALIAS="gemma-4-e4b"
+    MAIN_CTX=16384
+    MAIN_FLAGS="-np 1 -fa on -ctk q8_0 -ctv q8_0 --reasoning off --reasoning-budget 0 --temp 0.2"
+    MAIN_NAME="Gemma 4 E4B"
+    ;;
+esac
+
 GLM_MODEL="$MODELS_DIR/GLM-OCR-Q8_0.gguf"
 GLM_MMPROJ="$MODELS_DIR/mmproj-GLM-OCR-Q8_0.gguf"
 
-GEMMA_PORT=8085
+LLM_PORT=8085
 GLM_PORT=8089
 WEB_PORT=3000
 
@@ -29,8 +74,8 @@ if [[ ! -x "$LLAMA_SERVER" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$GEMMA_MODEL" ]]; then
-  echo "Error: Gemma 4 E4B model not found at $GEMMA_MODEL"
+if [[ ! -f "$MAIN_MODEL" ]]; then
+  echo "Error: $MAIN_NAME model not found at $MAIN_MODEL"
   exit 1
 fi
 
@@ -50,30 +95,25 @@ cleanup_port() {
   fi
 }
 
-cleanup_port $GEMMA_PORT
+cleanup_port $LLM_PORT
 cleanup_port $GLM_PORT
 
-# 3. Start Gemma 4 E4B (Study Synthesis / Reading)
-echo "Starting Gemma 4 E4B on port $GEMMA_PORT (16k context, Flash Attention, Q8 KV)..."
+# 3. Start Main Studies & English LLM
+echo "Starting $MAIN_NAME on port $LLM_PORT (${MAIN_CTX} context, Flash Attention)..."
 "$LLAMA_SERVER" \
-  -m "$GEMMA_MODEL" \
-  --alias gemma-4-e4b \
+  -m "$MAIN_MODEL" \
+  --alias "$MAIN_ALIAS" \
   -ngl 99 \
   -t 4 \
-  -c 16384 \
-  -np 1 \
-  -fa on \
-  -ctk q8_0 -ctv q8_0 \
-  --reasoning off \
-  --reasoning-budget 0 \
+  -c "$MAIN_CTX" \
+  $MAIN_FLAGS \
   --host 127.0.0.1 \
-  --port "$GEMMA_PORT" \
-  --temp 0.2 > "$RUN_DIR/gemma.log" 2>&1 &
+  --port "$LLM_PORT" > "$RUN_DIR/llm.log" 2>&1 &
 
-GEMMA_PID=$!
-echo "$GEMMA_PID" > "$RUN_DIR/gemma.pid"
-echo "  Gemma PID: $GEMMA_PID"
-
+LLM_PID=$!
+echo "$LLM_PID" > "$RUN_DIR/llm.pid"
+echo "$LLM_PID" > "$RUN_DIR/gemma.pid"
+echo "  $MAIN_NAME PID: $LLM_PID"
 # 4. Start GLM-OCR (Visual PDF to Markdown transcription)
 echo "Starting GLM-OCR on port $GLM_PORT (8k context, Flash Attention, Multimodal)..."
 "$LLAMA_SERVER" \
@@ -115,13 +155,13 @@ wait_for_health() {
   return 1
 }
 
-wait_for_health "$GEMMA_PORT" "Gemma 4 E4B"
+wait_for_health "$LLM_PORT" "$MAIN_NAME"
 wait_for_health "$GLM_PORT" "GLM-OCR"
 
 echo ""
 echo "All required AI models are healthy and active in RAM/VRAM."
-echo "  - Studies LLM : http://127.0.0.1:$GEMMA_PORT/v1 (Gemma 4 E4B)"
-echo "  - Vision OCR  : http://127.0.0.1:$GLM_PORT/v1 (GLM-OCR)"
+echo "  - Studies / English LLM : http://127.0.0.1:$LLM_PORT/v1 ($MAIN_NAME - $MAIN_ALIAS)"
+echo "  - Vision OCR            : http://127.0.0.1:$GLM_PORT/v1 (GLM-OCR)"
 echo ""
 
 # 6. Check if --models-only flag was passed
