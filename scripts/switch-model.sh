@@ -45,9 +45,9 @@ declare -A MODEL_CTX=(
 )
 
 declare -A MODEL_EXTRA_FLAGS=(
-  ["lfm3-1.7b"]="-np 1 -fa on --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning off --reasoning-budget 0 --no-reasoning-preserve"
-  ["lfm3-1.7b-q8"]="-np 1 -fa on --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning off --reasoning-budget 0 --no-reasoning-preserve"
-  ["lfm3-vl"]="-np 1 -fa on --mmproj $MODELS_DIR/mmproj-LFM3-VL-2B-Q8_0.gguf --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning off --reasoning-budget 0 --no-reasoning-preserve"
+  ["lfm3-1.7b"]="-np 1 -fa on --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning on --reasoning-budget -1"
+  ["lfm3-1.7b-q8"]="-np 1 -fa on --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning on --reasoning-budget -1"
+  ["lfm3-vl"]="-np 1 -fa on --mmproj $MODELS_DIR/mmproj-LFM3-VL-2B-Q8_0.gguf --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning on --reasoning-budget -1"
   ["gemma-4-e2b"]="-np 1 -fa on -ctk q8_0 -ctv q8_0"
   ["gemma-4-e2b-q5"]="-np 1 -fa on -ctk q8_0 -ctv q8_0"
   ["gemma-4-e4b"]="-np 1 -fa on -ctk q8_0 -ctv q8_0"

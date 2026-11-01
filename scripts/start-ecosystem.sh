@@ -23,21 +23,21 @@ case "$ACTIVE_MODEL_KEY" in
     MAIN_MODEL="$MODELS_DIR/LFM3-1.7B-QAD-Q4_0.gguf"
     MAIN_ALIAS="lfm3:1.7b-qad"
     MAIN_CTX=16384
-    MAIN_FLAGS="-np 1 -fa on --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning off --reasoning-budget 0 --no-reasoning-preserve"
+    MAIN_FLAGS="-np 1 -fa on --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning on --reasoning-budget -1"
     MAIN_NAME="LFM3 1.7B QAD Q4"
     ;;
   "lfm3:1.7b-q8"|"lfm3-1.7b-q8")
     MAIN_MODEL="$MODELS_DIR/LFM3-1.7B-Q8_0.gguf"
     MAIN_ALIAS="lfm3:1.7b-q8"
     MAIN_CTX=16384
-    MAIN_FLAGS="-np 1 -fa on --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning off --reasoning-budget 0 --no-reasoning-preserve"
+    MAIN_FLAGS="-np 1 -fa on --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning on --reasoning-budget -1"
     MAIN_NAME="LFM3 1.7B Q8"
     ;;
   "lfm3-vl:2b-qad"|"lfm3-vl")
     MAIN_MODEL="$MODELS_DIR/LFM3-VL-2B-QAD-Q4_0.gguf"
     MAIN_ALIAS="lfm3-vl:2b-qad"
     MAIN_CTX=16384
-    MAIN_FLAGS="-np 1 -fa on --mmproj $MODELS_DIR/mmproj-LFM3-VL-2B-Q8_0.gguf --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning off --reasoning-budget 0 --no-reasoning-preserve"
+    MAIN_FLAGS="-np 1 -fa on --mmproj $MODELS_DIR/mmproj-LFM3-VL-2B-Q8_0.gguf --temp 0.1 --top-k 50 --repeat-penalty 1.1 --reasoning on --reasoning-budget -1"
     MAIN_NAME="LFM3-VL 2B QAD Q4"
     ;;
   "gemma-4-e2b"|"gemma-4-e2b-q5")
