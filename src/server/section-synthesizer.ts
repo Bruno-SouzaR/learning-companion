@@ -1,5 +1,4 @@
-import { z } from 'zod';
-import { callLlmMarkdown, callLlmJson } from './llm';
+import { callLlmMarkdown } from './llm';
 import { getStudiesModel, getStudiesBaseUrl } from './env';
 export interface ParsedSection {
   sectionTitle: string;
@@ -295,87 +294,29 @@ export function parseSectionMarkdown(candidate: string): ParsedSection {
   };
 }
 
-export const SECTION_STANDARDS_PROMPT = `You are a Computer Science professor. Synthesize the provided study material in Brazilian Portuguese (PT-BR) with high technical depth and zero omissions, strictly based on the text.
+export const SECTION_STANDARDS_PROMPT = `You are an academic professor and author of high-level textbook chapters in Computer Science and Software Engineering.
+Your goal is to synthesize study materials into deep, structured, highly pedagogical Markdown strictly in Brazilian Portuguese (PT-BR) with EXHAUSTIVE depth and ZERO omissions.
 
-STRUCTURE:
-# [Título Técnico Específico da Seção]
+CORE RULES:
+1. NO META-COMMENTARY: never write "o autor lista", "o documento enumera", "inventário técnico" or any process description.
+2. BRAZILIAN PORTUGUESE (PT-BR): Write all content, headings, and explanations strictly in Brazilian Portuguese (use "Definição Teórica", "Mecanismo & Aplicação Prática", "Exemplo Prático" or "Nota de Código", "Vantagens" and "Desvantagens").
+3. MANDATORY STRUCTURE:
+   - Start with a descriptive heading (# Título Específico da Seção naming the primary technology, algorithm, or mechanism).
+   - Follow with: ### Pontos Nucleares (5-8 physical bullets "-" with broad conceptual pillars).
+   - Then create a subsection for EVERY technical concept in the text:
+     ### [Nome do Conceito]
+     - **Definição Teórica:** thorough, multi-paragraph conceptual explanation
+     - **Mecanismo & Aplicação Prática:** internal engineering mechanics, data structures, and operational flow
+     - **Exemplo Prático** or **Nota de Código:** concrete scenario with real commands/code from the text
+   - If comparing mechanisms, include a markdown table "| Mecanismo | Vantagens | Desvantagens |".
+4. CODE BLOCKS: Close all code blocks cleanly with three backticks. If the source material does not contain code or commands for a topic, do NOT invent fictional code.
+5. EXHAUSTIVE COMPLETENESS: Never merge, group, or skip technical concepts listed by the source. Explain all of them thoroughly.
+6. ABSOLUTE PROHIBITION OF CONCLUSIONS & BIBLIOGRAPHIES:
+   - Terminate immediately after the last concept. NEVER write "Conclusão", "Resumo Operacional", or "Considerações Finais".
+   - NEVER include textbook bibliographies ("Referências Bibliográficas"), curricular enrichment boxes ("EXPLORE+"), or author signatures ("Currículo Lattes", "Conteudista").
+7. MATHEMATICAL FORMULAS & NUMERICAL CALCULATIONS:
+   When the source material contains explicit formulas, performance equations, or architectural capacity limits (e.g. disk latency calculations, block addressing, pointer calculations), preserve and render them explicitly using LaTeX ($...$ or $$...$$). Do not reduce mathematical models to purely qualitative text.`;
 
-### Pontos Nucleares
-- [pilar 1: frase completa sintetizando um conceito estrutural da seção]
-- [pilar 2: frase completa sintetizando um conceito estrutural da seção]
-(Entre 5 e 8 marcadores conceituais abrangentes. PROIBIDO listar teclas de atalho, flags de comandos ou listas de termos atômicos)
-
-Para cada conceito ou mecanismo técnico identificado no texto:
-## [Nome do Conceito Técnico]
-### Definição Teórica
-Explique os conceitos teóricos e arquiteturais em profundidade (mínimo 2 parágrafos densos).
-
-### Mecanismo & Aplicação Prática
-Detalhe a mecânica interna do sistema operacional e do kernel: ponteiros, setores, blocos, inodes, tabelas e chamadas de sistema.
-Se e somente se o texto original contiver comandos reais de terminal Linux ou código, inclua-os e explique-os. É TERMINANTEMENTE PROIBIDO inventar código ou pseudocódigo que não conste no texto.
-
-### Análise Comparativa
-Quando houver métodos concorrentes ou trade-offs, formate obrigatoriamente como tabela Markdown completa:
-| Mecanismo | Funcionamento Interno | Vantagens | Desvantagens | Cenário Ideal |
-|---|---|---|---|---|
-
-REGRAS:
-- Todo o conteúdo deve ser em Português do Brasil (PT-BR).
-- Fórmulas matemáticas devem usar estritamente $$...$$ para blocos destacados e $...$ para termos em linha.
-- Termine a resposta imediatamente após o último conceito ou tabela. PROIBIDO gerar conclusões, resumos operacionais ou considerações finais.
-- PROIBIDO ADICIONAR NOTAS META-TEXTUAIS: Jamais insira notas no rodapé justificando comandos ou citando instruções (ex: PROIBIDO "*Nota: o texto não contém comandos...*").
-- PROIBIDO sintetizar listas bibliográficas ("Referências Bibliográficas"), caixas curriculares ("EXPLORE+") ou assinaturas de autoria ("Currículo Lattes").`;
-
-export const SKELETON_BLUEPRINT_SCHEMA = z.object({
-  sectionTitle: z.string().describe('Título técnico específico da seção em português'),
-  keyPoints: z
-    .array(z.string())
-    .min(5)
-    .max(8)
-    .describe('Exatamente entre 5 e 8 frases completas abrangendo os pilares conceituais essenciais'),
-  concepts: z
-    .array(z.string())
-    .min(5)
-    .max(12)
-    .describe('Lista exaustiva de conceitos, mecanismos e estruturas técnicas abordados no texto'),
-});
-
-export type SkeletonBlueprint = z.infer<typeof SKELETON_BLUEPRINT_SCHEMA>;
-
-const SKELETON_EXTRACTOR_PROMPT = `You are an expert technical curriculum architect and computer science professor.
-Analyze the provided study material chunk and extract an exhaustive structural blueprint strictly in Brazilian Portuguese (PT-BR).
-
-CRITICAL MISSION:
-1. Identify the exact technical title naming the primary mechanism or technology. Do NOT include generic labels like "Módulo", "Capítulo" or "Seção".
-2. Extract BETWEEN 5 AND 8 comprehensive "Pontos Nucleares" (foundational conceptual pillars).
-   - In a 70-page textbook section, condensing into only 3 points loses essential coverage. Extract at least 5 and at most 8 broad, macro conceptual pillars.
-   - Each bullet must be a substantive, high-level summary sentence explaining a macro pillar of the section.
-   - STRICTLY FORBIDDEN: atomic minutiae, keyboard shortcuts (e.g. vim/nano keys), command flags (-v, -s, -d), raw code snippets, or isolated parameter terms.
-3. Identify EVERY single core technical concept, algorithm, data structure, or mechanism present in the text that requires deep explanation in the body.
-   Do NOT synthesize bibliographies, reading lists ("Referências Bibliográficas"), curricular enrichment boxes ("EXPLORE+"), or author signatures.
-4. Output strictly a JSON object conforming to the schema.`;
-
-/**
- * Pass 1: Extract exhaustive structural blueprint from the study chunk.
- * Uses reasoning tokens (enable_thinking: true) to deeply plan and cluster the text into 3-5 macro conceptual pillars.
- */
-export async function extractSectionSkeleton(params: SynthesizeSectionParams): Promise<SkeletonBlueprint> {
-  return callLlmJson({
-    messages: [
-      { role: 'system', content: SKELETON_EXTRACTOR_PROMPT },
-      {
-        role: 'user',
-        content: `Document: "${params.title}" (Topic: ${params.topic}). Section ${params.sectionIndex} of ${params.totalSections}.\n\nText Content:\n${params.chunkContent.slice(0, 10000)}`,
-      },
-    ],
-    schema: SKELETON_BLUEPRINT_SCHEMA,
-    temperature: 0.15,
-    maxTokens: 3500,
-    chatTemplateKwargs: { enable_thinking: true },
-    model: getStudiesModel(),
-    baseUrl: getStudiesBaseUrl(),
-  });
-}
 /**
  * Deep module that transforms raw study textbook chunks into pedagogical,
  * deeply structured Markdown in Brazilian Portuguese (PT-BR).
@@ -383,40 +324,22 @@ export async function extractSectionSkeleton(params: SynthesizeSectionParams): P
  * Portuguese language sanitization, and structured concept extraction behind a single interface.
  */
 export async function synthesizeStudySection(params: SynthesizeSectionParams): Promise<SynthesizedSection> {
-  // Pass 1: Extract exhaustive blueprint (fast, enable_thinking: false, ~3-4s)
-  let blueprint: SkeletonBlueprint | null = null;
-  try {
-    blueprint = await extractSectionSkeleton(params);
-  } catch (err) {
-    console.warn(`[Synthesizer] Pass 1 skeleton extraction failed or fell back:`, err);
-  }
-
-  // Pass 2: Deep Grounded Expansion using the extracted blueprint (with reasoning enabled)
-  const blueprintDirectives =
-    blueprint?.concepts && blueprint.concepts.length > 0
-      ? `\n\nMANDATORY CONCEPT BLUEPRINT (EXHAUSTIVE):\nYou MUST create a dedicated "## [Nome do Conceito]" subsection for EACH of the following concepts extracted from this chunk. Skipping any item is strictly forbidden:\n${blueprint.concepts
-          .map((c) => `- ${c}`)
-          .join('\n')}\n`
-      : '';
-
-  const pass2Prompt = `${SECTION_STANDARDS_PROMPT}\nTarget Document: "${params.title}" (Topic: ${
-    params.topic
-  }). Processing Section ${params.sectionIndex} of ${params.totalSections}.${blueprintDirectives}\nOutput all content strictly in Brazilian Portuguese (PT-BR).`;
-
   const rawMarkdown = await callLlmMarkdown({
     messages: [
-      { role: 'system', content: pass2Prompt },
+      {
+        role: 'system',
+        content: `${SECTION_STANDARDS_PROMPT}\nTarget Document: "${params.title}" (Topic: ${params.topic}). Processing Section ${
+          params.sectionIndex
+        } of ${params.totalSections}. Output all content strictly in Brazilian Portuguese (PT-BR).`,
+      },
       { role: 'user', content: params.chunkContent },
     ],
-    maxTokens: 7500,
+    maxTokens: 3500,
     maxContinuations: 2,
     model: getStudiesModel(),
     baseUrl: getStudiesBaseUrl(),
-    temperature: 0.15,
-    topP: 0.9,
-    repeatPenalty: 1.04,
-    chatTemplateKwargs: { enable_thinking: false },
   });
+
   const pruned = pruneDanglingMarkdownTail(rawMarkdown);
   const sanitized = sanitizePortugueseMarkdown(pruned);
   const parsed = parseSectionMarkdown(sanitized);
@@ -437,42 +360,18 @@ export async function synthesizeStudySection(params: SynthesizeSectionParams): P
 
   let resolvedTitle: string;
   if (isGeneric) {
-    // Try to find the first real technical concept heading (## Concept)
-    const firstConceptHeading = cleanMarkdown
-      .match(/^##\s+([^\n]+)/m)?.[1]
-      ?.replace(/^[\d.]+\s*/, '')
-      ?.trim();
-
-    if (
-      firstConceptHeading &&
-      !/^(?:exemplo\s+pr[áa]tico|defini[cç][ãa]o\s+te[óo]rica|mecanismo|m[óo]dulo|se[cç][ãa]o)/i.test(
-        firstConceptHeading
-      )
-    ) {
-      resolvedTitle = sanitizePortugueseMarkdown(firstConceptHeading);
-    } else if (
-      blueprint?.sectionTitle &&
-      !/^(?:se[cç][ãa]o|m[óo]dulo|sem t[íi]tulo)/i.test(blueprint.sectionTitle)
-    ) {
-      resolvedTitle = sanitizePortugueseMarkdown(blueprint.sectionTitle);
-    } else {
-      resolvedTitle = `Seção ${params.sectionIndex}`;
-    }
+    const firstSubhead = cleanMarkdown.match(/^###\s+([^\n]+)/m)?.[1]?.trim();
+    resolvedTitle = firstSubhead
+      ? sanitizePortugueseMarkdown(firstSubhead)
+      : `Seção ${params.sectionIndex}`;
   } else {
     resolvedTitle = sanitizePortugueseMarkdown(cleanTitle);
   }
-  // If Markdown parser missed Pontos Nucleares, fall back to authoritative blueprint keyPoints
-  // Final key points: ensure between 5 and 8 items, preferring the high-level blueprint pillars
+
+  // Ensure 5 to 8 key points max
   const finalKeyPoints =
-    cleanKeyPoints.length >= 5 && cleanKeyPoints.length <= 8
-      ? cleanKeyPoints
-      : blueprint?.keyPoints && blueprint.keyPoints.length >= 5
-        ? blueprint.keyPoints.slice(0, 8).map(sanitizePortugueseMarkdown)
-        : cleanKeyPoints.length >= 3
-          ? cleanKeyPoints.slice(0, 8)
-          : blueprint?.keyPoints && blueprint.keyPoints.length > 0
-            ? blueprint.keyPoints.slice(0, 8).map(sanitizePortugueseMarkdown)
-            : cleanKeyPoints;
+    cleanKeyPoints.length > 8 ? cleanKeyPoints.slice(0, 8) : cleanKeyPoints;
+
   return {
     sectionIndex: params.sectionIndex,
     sectionTitle: resolvedTitle,
