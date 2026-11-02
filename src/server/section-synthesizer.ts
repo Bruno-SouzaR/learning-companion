@@ -53,9 +53,19 @@ export function sanitizePortugueseMarkdown(text: string): string {
     .replace(/[-*]\s+\*\*[A-Za-zÀ-ÿ]{1,6}-\s*\*\*/g, '- **')
     .replace(/(\bDefinição Teórica)\s*-\s*\*\*(Mecanismo & Aplicação Prática)/g, '$1:**\n- **$2')
     .replace(/(\*\*(?:Definição Teórica|Mecanismo & Aplicação Prática|Exemplo Prático)\*\*):?\s*-\s*\*\*/g, '$1:\n- **')
-    // Defensively strip leaked bibliography and Explore+ subtopics
+    // Defensively strip leaked bibliography and Explore+ subtopics (with or without numbers)
     .replace(
-      /\n#{1,4}\s*(?:Refer[êe]ncias\s+Bibliogr[áa]ficas|Bibliografia|Explore\+|Saiba\s+Mais|Fontes)[\s\S]*?(?=\n#{1,3}\s|\n\s*---\s*\n|$)/gi,
+      /\n#{1,4}\s*(?:\d+\.\s*)?(?:Refer[êe]ncias\s+Bibliogr[áa]ficas|Bibliografia|Explore\+|Saiba\s+Mais|Fontes)[\s\S]*?(?=\n#{1,2}\s|\n\s*---\s*\n|$)/gi,
+      ''
+    )
+    // Defensively strip author signatures, curriculum lattes, or contadorista lines
+    .replace(
+      /\n\s*(?:\*\*|__|\*)?(?:Contadorista|Autor|Professor)?(?:\*\*|__|\*)?\s*:?\s*[^\n]*CURR[ÍI]CULO\s+LATTES[^\n]*/gi,
+      ''
+    )
+    // Defensively strip closing meta-notes and justifications (e.g. *Nota: o texto não contém comandos...*)
+    .replace(
+      /\n\s*(?:\*\*|\*)\s*Nota:?(?:\*\*|\*)[\s\S]*?(?=\n#{1,2}\s|\n\s*---\s*\n|$)/gi,
       ''
     )
     // Defensively strip leaked textbook assessment questions, answer choices, and gabaritos
@@ -188,13 +198,14 @@ export function parseSectionMarkdown(candidate: string): ParsedSection {
 }
 
 export const SECTION_STANDARDS_PROMPT = `You are a Computer Science professor. Synthesize the provided study material in Brazilian Portuguese (PT-BR) with high technical depth and zero omissions, strictly based on the text.
+
 STRUCTURE:
 # [Título Técnico Específico da Seção]
 
 ### Pontos Nucleares
-- [bullet 1: frase completa sintetizando um conceito essencial]
-- [bullet 2: frase completa sintetizando um conceito essencial]
-(5 a 8 marcadores com pontos-chave)
+- [pilar 1: frase completa sintetizando um conceito estrutural da seção]
+- [pilar 2: frase completa sintetizando um conceito estrutural da seção]
+(Exatamente 3 a 5 marcadores conceituais abrangentes. Menos é mais: PROIBIDO listar teclas de atalho, flags de comandos ou listas de termos atômicos)
 
 Para cada conceito ou mecanismo técnico identificado no texto:
 ## [Nome do Conceito Técnico]
@@ -213,12 +224,22 @@ Quando houver métodos concorrentes ou trade-offs, formate obrigatoriamente como
 REGRAS:
 - Todo o conteúdo deve ser em Português do Brasil (PT-BR).
 - Fórmulas matemáticas devem usar estritamente $$...$$ para blocos destacados e $...$ para termos em linha.
-- Termine a resposta imediatamente após o último conceito. PROIBIDO gerar conclusões, resumos operacionais ou considerações finais.`;
+- Termine a resposta imediatamente após o último conceito ou tabela. PROIBIDO gerar conclusões, resumos operacionais ou considerações finais.
+- PROIBIDO ADICIONAR NOTAS META-TEXTUAIS: Jamais insira notas no rodapé justificando comandos ou citando instruções (ex: PROIBIDO "*Nota: o texto não contém comandos...*").
+- PROIBIDO sintetizar listas bibliográficas ("Referências Bibliográficas"), caixas curriculares ("EXPLORE+") ou assinaturas de autoria ("Currículo Lattes").`;
 
 export const SKELETON_BLUEPRINT_SCHEMA = z.object({
   sectionTitle: z.string().describe('Título técnico específico da seção em português'),
-  keyPoints: z.array(z.string()).min(3).max(8).describe('5 a 8 frases completas dos pontos nucleares essenciais'),
-  concepts: z.array(z.string()).min(3).max(12).describe('Lista exaustiva de todos os conceitos, mecanismos e estruturas técnicas abordados no texto'),
+  keyPoints: z
+    .array(z.string())
+    .min(3)
+    .max(5)
+    .describe('Exatamente 3 a 5 frases completas abrangendo os pilares conceituais essenciais'),
+  concepts: z
+    .array(z.string())
+    .min(3)
+    .max(12)
+    .describe('Lista exaustiva de conceitos, mecanismos e estruturas técnicas abordados no texto'),
 });
 
 export type SkeletonBlueprint = z.infer<typeof SKELETON_BLUEPRINT_SCHEMA>;
@@ -228,9 +249,11 @@ Analyze the provided study material chunk and extract an exhaustive structural b
 
 CRITICAL MISSION:
 1. Identify the exact technical title naming the primary mechanism or technology. Do NOT include generic labels like "Módulo", "Capítulo" or "Seção".
-2. Extract 5-8 essential "Pontos Nucleares" (full sentences summarizing core takeaways).
-3. Identify EVERY single technical concept, algorithm, data structure, or mechanism present in the text.
-   Do NOT omit any concept. List all items that require in-depth technical explanation.
+2. Extract EXACTLY 3 to 5 comprehensive "Pontos Nucleares" (foundational conceptual pillars).
+   - "Menos é mais": each bullet must summarize a broad, foundational concept of the section.
+   - STRICTLY FORBIDDEN: atomic minutiae, keyboard shortcuts (e.g. vim/nano keys), command flags (-v, -s, -d), or isolated parameter terms.
+3. Identify EVERY single core technical concept, algorithm, data structure, or mechanism present in the text.
+   Do NOT synthesize bibliographies, reading lists ("Referências Bibliográficas"), curricular enrichment boxes ("EXPLORE+"), or author signatures.
 4. Output strictly a JSON object conforming to the schema.`;
 
 /**
@@ -339,13 +362,13 @@ export async function synthesizeStudySection(params: SynthesizeSectionParams): P
     resolvedTitle = sanitizePortugueseMarkdown(cleanTitle);
   }
   // If Markdown parser missed Pontos Nucleares, fall back to authoritative blueprint keyPoints
+  // Limit key points strictly to 3-5 comprehensive pillars (less is more)
   const finalKeyPoints =
-    cleanKeyPoints.length >= 3
+    cleanKeyPoints.length >= 3 && cleanKeyPoints.length <= 5
       ? cleanKeyPoints
-      : blueprint?.keyPoints && blueprint.keyPoints.length > 0
-        ? blueprint.keyPoints.map(sanitizePortugueseMarkdown)
-        : cleanKeyPoints;
-
+      : blueprint?.keyPoints && blueprint.keyPoints.length >= 3
+        ? blueprint.keyPoints.slice(0, 5).map(sanitizePortugueseMarkdown)
+        : cleanKeyPoints.slice(0, 5);
   return {
     sectionIndex: params.sectionIndex,
     sectionTitle: resolvedTitle,
