@@ -69,31 +69,55 @@ function escapeHtml(str: string): string {
  * Uses strict boundaries to avoid false-positive matches on monetary currency (e.g. $50 a $100).
  */
 function renderMathInMarkdown(content: string): string {
-  // 1. Block math: $$...$$
-  let processed = content.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
-    try {
-      return katex.renderToString(math.trim(), {
-        displayMode: true,
-        output: 'html',
-        throwOnError: false,
-      });
-    } catch {
-      return `$$${math}$$`;
-    }
-  });
+  // 1. Block display math: \[...\] or $$...$$
+  let processed = content
+    .replace(/\\\[([\s\S]+?)\\\]/g, (_, math) => {
+      try {
+        return katex.renderToString(math.trim(), {
+          displayMode: true,
+          output: 'html',
+          throwOnError: false,
+        });
+      } catch {
+        return `\\[${math}\\]`;
+      }
+    })
+    .replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
+      try {
+        return katex.renderToString(math.trim(), {
+          displayMode: true,
+          output: 'html',
+          throwOnError: false,
+        });
+      } catch {
+        return `$$${math}$$`;
+      }
+    });
 
-  // 2. Inline math: $...$ with non-whitespace boundaries to avoid capturing currencies
-  processed = processed.replace(/(?<!\\)\$(?!\s)([^\$\n]+?)(?<!\s)(?<!\\)\$/g, (_, math) => {
-    try {
-      return katex.renderToString(math.trim(), {
-        displayMode: false,
-        output: 'html',
-        throwOnError: false,
-      });
-    } catch {
-      return `$${math}$`;
-    }
-  });
+  // 2. Inline math: \(...\) or $...$ with non-whitespace boundaries to avoid capturing currencies
+  processed = processed
+    .replace(/\\\(([\s\S]+?)\\\)/g, (_, math) => {
+      try {
+        return katex.renderToString(math.trim(), {
+          displayMode: false,
+          output: 'html',
+          throwOnError: false,
+        });
+      } catch {
+        return `\\(${math}\\)`;
+      }
+    })
+    .replace(/(?<!\\)\$(?!\s)([^\$\n]+?)(?<!\s)(?<!\\)\$/g, (_, math) => {
+      try {
+        return katex.renderToString(math.trim(), {
+          displayMode: false,
+          output: 'html',
+          throwOnError: false,
+        });
+      } catch {
+        return `$${math}$`;
+      }
+    });
 
   return processed;
 }

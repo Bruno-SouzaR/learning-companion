@@ -119,7 +119,7 @@ export function chunkTextBySections(
 
   const getBreadcrumb = () => {
     if (!activeH1 && !activeH2) return '';
-    return `[Document Context: ${activeH1}${activeH2 ? ` > ${activeH2}` : ''}]\n\n`;
+    return `<!-- Contexto Técnico: ${activeH1}${activeH2 ? ` > ${activeH2}` : ''} -->\n\n`;
   };
 
   const updateHeadings = (textBlock: string) => {
@@ -132,8 +132,11 @@ export function chunkTextBySections(
       } else if (/^##\s+/.test(trimmed) && trimmed.length < 120) {
         activeH2 = trimmed.replace(/^##\s+/, '').trim();
       } else if (/^(?:M[óo]dulo|Cap[íi]tulo)\s+\d+/i.test(trimmed) && trimmed.length < 120) {
-        activeH1 = trimmed;
-        activeH2 = '';
+        const cleanTopic = trimmed.replace(/^(?:M[óo]dulo|Cap[íi]tulo)\s+\d+\s*[-–—:]*\s*/i, '').trim();
+        if (cleanTopic.length > 3) {
+          activeH1 = cleanTopic;
+          activeH2 = '';
+        }
       }
     }
   };

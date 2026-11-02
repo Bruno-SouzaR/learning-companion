@@ -63,11 +63,14 @@ export function sanitizePortugueseMarkdown(text: string): string {
       /\n#{1,4}\s*(?:Verificando\s+o\s+Aprendizado|Verifica[cç][aã]o\s+de\s+Aprendizado|Atividades?\s+de\s+Autoavalia[cç][aã]o|Autoavalia[cç][aã]o|Exerc[íi]cios?\s+Propostos?|Gabarito(?:\s+Final|\s+Comentado)?)[\s\S]*?(?=\n#{1,2}\s|\n\s*---\s*\n|$)/gi,
       ''
     )
-    // Defensively strip leaked trailing conclusion and recap blocks (e.g. ## Conclusão, ## Conclusão Técnica)
+    // Defensively strip leaked trailing conclusion, recap, or summary blocks
     .replace(
-      /\n#{1,4}\s*(?:Conclus[aã]o(?:\s+(?:T[eé]cnica|do\s+M[oó]dulo|da\s+Se[cç][aã]o|Final|\(Resumo[^\)]*\)))?|Considera[cç][oõ]es\s+Finais|Resumo\s+Final)[\s\S]*?(?=\n#{1,2}\s|\n\s*---\s*\n|$)/gi,
+      /\n#{1,4}\s*(?:Conclus[aã]o.*|Considera[cç][oõ]es\s+Finais.*|Resumo\s+(?:Operacional|Final|de\s+Comandos|dos\s+Conceitos).*)[\s\S]*?(?=\n#{1,2}\s|\n\s*---\s*\n|$)/gi,
       ''
-    );
+    )
+    // Normalize unindented display math blocks to prevent marked from turning them into pre/code
+    .replace(/\n[ \t]+(\\\[[\s\S]+?\\\])/g, '\n\n$1\n\n')
+    .replace(/\n[ \t]+(\$\$[\s\S]+?\$\$)/g, '\n\n$1\n\n');
 }
 
 /**
@@ -184,56 +187,33 @@ export function parseSectionMarkdown(candidate: string): ParsedSection {
   };
 }
 
-export const SECTION_STANDARDS_PROMPT = `You are an expert Computer Science professor and technical reference architect specializing in deep, concept-by-concept technical reference documentation.
-Your goal is to synthesize study materials into deep, rigorously structured, highly pedagogical Markdown strictly in Brazilian Portuguese (PT-BR) with EXHAUSTIVE technical depth and ZERO omissions.
-CORE MANDATORY INVARIANTS:
-1. STRICT BRAZILIAN PORTUGUESE (PT-BR):
-   Write all content, titles, headings, and pedagogical explanations strictly in Brazilian Portuguese.
-   Explicitly forbid Spanish cognates (e.g. use "Definição Teórica" NOT "Definición", "Exemplo Prático" NOT "Ejemplo", "Vantagens" and "Desvantagens" NOT "Ventajas").
+export const SECTION_STANDARDS_PROMPT = `You are a Computer Science professor. Synthesize the provided study material in Brazilian Portuguese (PT-BR) with high technical depth and zero omissions, strictly based on the text.
+STRUCTURE:
+# [Título Técnico Específico da Seção]
 
-2. STRICT HEADING HIERARCHY (NO MALFORMED HEADINGS):
-   You MUST strictly adhere to this exact heading structure. Never emit broken heading markers (such as "## ###" or multiple consecutive hashes):
-   # [Título Específico da Seção - nomeando a tecnologia, estrutura de dados ou mecanismo]
+### Pontos Nucleares
+- [bullet 1: frase completa sintetizando um conceito essencial]
+- [bullet 2: frase completa sintetizando um conceito essencial]
+(5 a 8 marcadores com pontos-chave)
 
-   ### Pontos Nucleares
-   - [bullet 1: frase completa sintetizando um conceito nuclear essencial]
-   - [bullet 2: frase completa sintetizando um conceito nuclear essencial]
-   (5 a 8 marcadores com pontos-chave)
+Para cada conceito ou mecanismo técnico identificado no texto:
+## [Nome do Conceito Técnico]
+### Definição Teórica
+Explique os conceitos teóricos e arquiteturais em profundidade (mínimo 2 parágrafos densos).
 
-   Para cada conceito, estrutura de dados, algoritmo ou mecanismo técnico presente no texto:
-   ## [Nome do Conceito Técnico]
+### Mecanismo & Aplicação Prática
+Detalhe a mecânica interna do sistema operacional e do kernel: ponteiros, setores, blocos, inodes, tabelas e chamadas de sistema.
+Se e somente se o texto original contiver comandos reais de terminal Linux ou código, inclua-os e explique-os. É TERMINANTEMENTE PROIBIDO inventar código ou pseudocódigo que não conste no texto.
 
-   ### Definição Teórica
-   [Explicação teórica aprofundada: mínimo 2 parágrafos densos e completos detalhando fundamentos conceituais, princípios matemáticos ou de engenharia e requisitos do sistema. PROIBIDO resumos superficiais ou frases de uma única linha.]
+### Análise Comparativa
+Quando houver métodos concorrentes ou trade-offs, formate obrigatoriamente como tabela Markdown completa:
+| Mecanismo | Funcionamento Interno | Vantagens | Desvantagens | Cenário Ideal |
+|---|---|---|---|---|
 
-   ### Mecanismo & Aplicação Prática
-   [Mecânica interna exata: fluxo operacional passo a passo, como o kernel/SO gerencia ponteiros, blocos de disco, inodes, setores, memória RAM, registradores e chamadas de sistema (syscalls). Detalhe a implementação em nível de arquitetura.]
-
-   ### Exemplo Prático (ou Nota de Código)
-   [Cenário técnico concreto: comandos reais de terminal Linux comentados linha a linha, trechos de código em C/pseudocódigo demonstrando a lógica interna, ou diagramas de blocos.]
-
-3. MANDATORY COMPARATIVE TABLES:
-   Whenever the material introduces competing mechanisms, strategies, or trade-offs (e.g., Alocação Contígua vs. Encadeada vs. Indexada; Cache Write-Through vs. Write-Back; Diretórios Nível Único vs. Árvore), you MUST provide a comprehensive Markdown comparison table:
-   | Mecanismo / Abordagem | Funcionamento Interno | Vantagens | Desvantagens | Cenário de Uso Recomendado |
-   |---|---|---|---|---|
-
-4. MATHEMATICAL FORMULAS & ARCHITECTURAL LIMITS:
-   Whenever equations, capacities, latency, pointer arithmetic, or addressing limits appear (e.g. cálculo de tamanho de bloco, limite de ponteiros de inode, tempo de acesso a disco), render them explicitly in LaTeX ($...$ ou $$...$$).
-
-5. ZERO SUPERFICIALITY & CONSTANT RIGOR:
-   - PROHIBITED: Single-sentence definitions, generic hand-waving, or cutting short on later sections.
-   - Every single concept must be given the same deep academic rigor from the first to the very last line.
-   - NO META-COMMENTARY: never write conversational preambles (e.g. "O autor lista", "Abaixo vemos", "O documento descreve").
-
-6. ABSOLUTE BAN ON CONCLUSIONS, RECAPS, AND CLOSING REMARKS (CRITICAL INVARIANT):
-   - NEVER generate a "Conclusão", "Conclusão Técnica", "Conclusão do Módulo", "Resumo", "Considerações Finais", or any recap at the end of the section.
-   - Summarizing what you just explained is STRICTLY FORBIDDEN and wastes token budget.
-   - Every single token must be dedicated to explaining the core technical concepts themselves with maximum depth.
-   - Terminate the section immediately after the final concept's practical example or comparative table. No closing remarks, no farewells, no author signatures.
-
-7. STRICT GROUNDING IN SOURCE MATERIAL (ANTI-HALLUCINATION INVARIANT):
-   - Every single concept, algorithm step, data structure, and technical fact MUST be strictly grounded in the provided source text.
-   - NEVER invent fictional utilities, external tools, or false claims. Maintain 100% academic factual fidelity to the study material.`;
+REGRAS:
+- Todo o conteúdo deve ser em Português do Brasil (PT-BR).
+- Fórmulas matemáticas devem usar estritamente $$...$$ para blocos destacados e $...$ para termos em linha.
+- Termine a resposta imediatamente após o último conceito. PROIBIDO gerar conclusões, resumos operacionais ou considerações finais.`;
 
 export const SKELETON_BLUEPRINT_SCHEMA = z.object({
   sectionTitle: z.string().describe('Título técnico específico da seção em português'),
@@ -247,7 +227,7 @@ const SKELETON_EXTRACTOR_PROMPT = `You are an expert technical curriculum archit
 Analyze the provided study material chunk and extract an exhaustive structural blueprint strictly in Brazilian Portuguese (PT-BR).
 
 CRITICAL MISSION:
-1. Identify the exact technical title naming the primary mechanism or technology.
+1. Identify the exact technical title naming the primary mechanism or technology. Do NOT include generic labels like "Módulo", "Capítulo" or "Seção".
 2. Extract 5-8 essential "Pontos Nucleares" (full sentences summarizing core takeaways).
 3. Identify EVERY single technical concept, algorithm, data structure, or mechanism present in the text.
    Do NOT omit any concept. List all items that require in-depth technical explanation.
@@ -327,22 +307,37 @@ export async function synthesizeStudySection(params: SynthesizeSectionParams): P
     !cleanTitle ||
     cleanTitle.startsWith('Seção sem') ||
     cleanTitle.startsWith('Sección sin') ||
+    /^(?:exemplo\s+pr[áa]tico|defini[cç][ãa]o\s+te[óo]rica|mecanismo|m[óo]dulo\s+\d+|se[cç][ãa]o\s+\d+)/i.test(
+      cleanTitle
+    ) ||
     cleanTitle.toLowerCase() === params.title.toLowerCase();
 
   let resolvedTitle: string;
   if (isGeneric) {
-    if (blueprint?.sectionTitle && !blueprint.sectionTitle.toLowerCase().includes('sem título')) {
+    // Try to find the first real technical concept heading (## Concept)
+    const firstConceptHeading = cleanMarkdown
+      .match(/^##\s+([^\n]+)/m)?.[1]
+      ?.replace(/^[\d.]+\s*/, '')
+      ?.trim();
+
+    if (
+      firstConceptHeading &&
+      !/^(?:exemplo\s+pr[áa]tico|defini[cç][ãa]o\s+te[óo]rica|mecanismo|m[óo]dulo|se[cç][ãa]o)/i.test(
+        firstConceptHeading
+      )
+    ) {
+      resolvedTitle = sanitizePortugueseMarkdown(firstConceptHeading);
+    } else if (
+      blueprint?.sectionTitle &&
+      !/^(?:se[cç][ãa]o|m[óo]dulo|sem t[íi]tulo)/i.test(blueprint.sectionTitle)
+    ) {
       resolvedTitle = sanitizePortugueseMarkdown(blueprint.sectionTitle);
     } else {
-      const firstSubhead = cleanMarkdown.match(/^###\s+([^\n]+)/m)?.[1]?.trim();
-      resolvedTitle = firstSubhead
-        ? sanitizePortugueseMarkdown(firstSubhead)
-        : `Seção ${params.sectionIndex}`;
+      resolvedTitle = `Seção ${params.sectionIndex}`;
     }
   } else {
     resolvedTitle = sanitizePortugueseMarkdown(cleanTitle);
   }
-
   // If Markdown parser missed Pontos Nucleares, fall back to authoritative blueprint keyPoints
   const finalKeyPoints =
     cleanKeyPoints.length >= 3
