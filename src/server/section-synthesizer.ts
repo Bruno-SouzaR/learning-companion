@@ -1,6 +1,6 @@
-import { callLlmMarkdown } from './llm';
+import { z } from 'zod';
+import { callLlmMarkdown, callLlmJson } from './llm';
 import { getStudiesModel, getStudiesBaseUrl } from './env';
-
 export interface ParsedSection {
   sectionTitle: string;
   keyPoints: string[];
@@ -229,7 +229,51 @@ CORE MANDATORY INVARIANTS:
    - NEVER generate a "Conclusão", "Conclusão Técnica", "Conclusão do Módulo", "Resumo", "Considerações Finais", or any recap at the end of the section.
    - Summarizing what you just explained is STRICTLY FORBIDDEN and wastes token budget.
    - Every single token must be dedicated to explaining the core technical concepts themselves with maximum depth.
-   - Terminate the section immediately after the final concept's practical example or comparative table. No closing remarks, no farewells, no author signatures.`;
+   - Terminate the section immediately after the final concept's practical example or comparative table. No closing remarks, no farewells, no author signatures.
+
+7. STRICT GROUNDING IN SOURCE MATERIAL (ANTI-HALLUCINATION INVARIANT):
+   - Every single concept, algorithm step, data structure, and technical fact MUST be strictly grounded in the provided source text.
+   - NEVER invent fictional utilities, external tools, or false claims. Maintain 100% academic factual fidelity to the study material.`;
+
+export const SKELETON_BLUEPRINT_SCHEMA = z.object({
+  sectionTitle: z.string().describe('Título técnico específico da seção em português'),
+  keyPoints: z.array(z.string()).min(3).max(8).describe('5 a 8 frases completas dos pontos nucleares essenciais'),
+  concepts: z.array(z.string()).min(3).max(12).describe('Lista exaustiva de todos os conceitos, mecanismos e estruturas técnicas abordados no texto'),
+});
+
+export type SkeletonBlueprint = z.infer<typeof SKELETON_BLUEPRINT_SCHEMA>;
+
+const SKELETON_EXTRACTOR_PROMPT = `You are an expert technical curriculum architect and computer science professor.
+Analyze the provided study material chunk and extract an exhaustive structural blueprint strictly in Brazilian Portuguese (PT-BR).
+
+CRITICAL MISSION:
+1. Identify the exact technical title naming the primary mechanism or technology.
+2. Extract 5-8 essential "Pontos Nucleares" (full sentences summarizing core takeaways).
+3. Identify EVERY single technical concept, algorithm, data structure, or mechanism present in the text.
+   Do NOT omit any concept. List all items that require in-depth technical explanation.
+4. Output strictly a JSON object conforming to the schema.`;
+
+/**
+ * Pass 1: Extract exhaustive structural blueprint from the study chunk.
+ * Runs without reasoning tokens (enable_thinking: false) for near-instant execution (<4s).
+ */
+export async function extractSectionSkeleton(params: SynthesizeSectionParams): Promise<SkeletonBlueprint> {
+  return callLlmJson({
+    messages: [
+      { role: 'system', content: SKELETON_EXTRACTOR_PROMPT },
+      {
+        role: 'user',
+        content: `Document: "${params.title}" (Topic: ${params.topic}). Section ${params.sectionIndex} of ${params.totalSections}.\n\nText Content:\n${params.chunkContent.slice(0, 10000)}`,
+      },
+    ],
+    schema: SKELETON_BLUEPRINT_SCHEMA,
+    temperature: 0.1,
+    maxTokens: 1500,
+    chatTemplateKwargs: { enable_thinking: false },
+    model: getStudiesModel(),
+    baseUrl: getStudiesBaseUrl(),
+  });
+}
 /**
  * Deep module that transforms raw study textbook chunks into pedagogical,
  * deeply structured Markdown in Brazilian Portuguese (PT-BR).
@@ -237,22 +281,39 @@ CORE MANDATORY INVARIANTS:
  * Portuguese language sanitization, and structured concept extraction behind a single interface.
  */
 export async function synthesizeStudySection(params: SynthesizeSectionParams): Promise<SynthesizedSection> {
+  // Pass 1: Extract exhaustive blueprint (fast, enable_thinking: false, ~3-4s)
+  let blueprint: SkeletonBlueprint | null = null;
+  try {
+    blueprint = await extractSectionSkeleton(params);
+  } catch (err) {
+    console.warn(`[Synthesizer] Pass 1 skeleton extraction failed or fell back:`, err);
+  }
+
+  // Pass 2: Deep Grounded Expansion using the extracted blueprint (with reasoning enabled)
+  const blueprintDirectives =
+    blueprint?.concepts && blueprint.concepts.length > 0
+      ? `\n\nMANDATORY CONCEPT BLUEPRINT (EXHAUSTIVE):\nYou MUST create a dedicated "## [Nome do Conceito]" subsection for EACH of the following concepts extracted from this chunk. Skipping any item is strictly forbidden:\n${blueprint.concepts
+          .map((c) => `- ${c}`)
+          .join('\n')}\n`
+      : '';
+
+  const pass2Prompt = `${SECTION_STANDARDS_PROMPT}\nTarget Document: "${params.title}" (Topic: ${
+    params.topic
+  }). Processing Section ${params.sectionIndex} of ${params.totalSections}.${blueprintDirectives}\nOutput all content strictly in Brazilian Portuguese (PT-BR).`;
+
   const rawMarkdown = await callLlmMarkdown({
     messages: [
-      {
-        role: 'system',
-        content: `${SECTION_STANDARDS_PROMPT}\nTarget Document: "${params.title}" (Topic: ${params.topic}). Processing Section ${
-          params.sectionIndex
-        } of ${params.totalSections}. Output all content strictly in Brazilian Portuguese (PT-BR).`,
-      },
+      { role: 'system', content: pass2Prompt },
       { role: 'user', content: params.chunkContent },
     ],
     maxTokens: 7500,
     maxContinuations: 2,
     model: getStudiesModel(),
     baseUrl: getStudiesBaseUrl(),
+    temperature: 0.15,
+    topP: 0.9,
+    repeatPenalty: 1.04,
   });
-
   const pruned = pruneDanglingMarkdownTail(rawMarkdown);
   const sanitized = sanitizePortugueseMarkdown(pruned);
   const parsed = parseSectionMarkdown(sanitized);
@@ -270,18 +331,30 @@ export async function synthesizeStudySection(params: SynthesizeSectionParams): P
 
   let resolvedTitle: string;
   if (isGeneric) {
-    const firstSubhead = cleanMarkdown.match(/^###\s+([^\n]+)/m)?.[1]?.trim();
-    resolvedTitle = firstSubhead
-      ? sanitizePortugueseMarkdown(firstSubhead)
-      : `Seção ${params.sectionIndex}`;
+    if (blueprint?.sectionTitle && !blueprint.sectionTitle.toLowerCase().includes('sem título')) {
+      resolvedTitle = sanitizePortugueseMarkdown(blueprint.sectionTitle);
+    } else {
+      const firstSubhead = cleanMarkdown.match(/^###\s+([^\n]+)/m)?.[1]?.trim();
+      resolvedTitle = firstSubhead
+        ? sanitizePortugueseMarkdown(firstSubhead)
+        : `Seção ${params.sectionIndex}`;
+    }
   } else {
     resolvedTitle = sanitizePortugueseMarkdown(cleanTitle);
   }
 
+  // If Markdown parser missed Pontos Nucleares, fall back to authoritative blueprint keyPoints
+  const finalKeyPoints =
+    cleanKeyPoints.length >= 3
+      ? cleanKeyPoints
+      : blueprint?.keyPoints && blueprint.keyPoints.length > 0
+        ? blueprint.keyPoints.map(sanitizePortugueseMarkdown)
+        : cleanKeyPoints;
+
   return {
     sectionIndex: params.sectionIndex,
     sectionTitle: resolvedTitle,
-    keyPoints: cleanKeyPoints,
+    keyPoints: finalKeyPoints,
     markdown: cleanMarkdown,
   };
 }

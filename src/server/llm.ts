@@ -68,12 +68,20 @@ export const QWEN_SAMPLING_PROFILE: ModelSamplingProfile = {
   presencePenalty: 0.0,
   repeatPenalty: 1.05,
 };
+export const LFM_SAMPLING_PROFILE: ModelSamplingProfile = {
+  temperature: 0.15,
+  topP: 0.90,
+  topK: 50,
+  presencePenalty: 0.0,
+  repeatPenalty: 1.04,
+};
 
 export const DEFAULT_SAMPLING_PROFILE: ModelSamplingProfile = {
   temperature: 0.2,
 };
 
 export function resolveModelSamplingProfile(modelName: string): ModelSamplingProfile {
+  if (/lfm/i.test(modelName)) return LFM_SAMPLING_PROFILE;
   if (/gemma/i.test(modelName)) return GEMMA_SAMPLING_PROFILE;
   if (/qwen/i.test(modelName)) return QWEN_SAMPLING_PROFILE;
   return DEFAULT_SAMPLING_PROFILE;
@@ -97,6 +105,7 @@ export async function requestChatCompletion(params: {
   topK?: number;
   presencePenalty?: number;
   repeatPenalty?: number;
+  chatTemplateKwargs?: Record<string, unknown>;
 }): Promise<LlmResponse> {
   const env = getEnv();
   const baseUrl = params.baseUrl || env.LLM_BASE_URL;
@@ -135,6 +144,9 @@ export async function requestChatCompletion(params: {
     payload.response_format = { type: 'json_object' };
   }
 
+  if (params.chatTemplateKwargs) {
+    payload.chat_template_kwargs = params.chatTemplateKwargs;
+  }
   if (params.maxTokens) {
     payload.max_tokens = params.maxTokens;
   }
@@ -210,6 +222,7 @@ export async function callLlmJson<T>(params: {
   maxTokens?: number;
   model?: string;
   baseUrl?: string;
+  chatTemplateKwargs?: Record<string, unknown>;
 }): Promise<T> {
   const { content: rawContent } = await requestChatCompletion({
     messages: params.messages,
@@ -218,6 +231,7 @@ export async function callLlmJson<T>(params: {
     jsonMode: true,
     model: params.model,
     baseUrl: params.baseUrl,
+    chatTemplateKwargs: params.chatTemplateKwargs,
   });
 
   // Extract JSON object if wrapped in conversational text or markdown code fences
@@ -305,6 +319,7 @@ export async function callLlmMarkdown(params: {
   topK?: number;
   presencePenalty?: number;
   repeatPenalty?: number;
+  chatTemplateKwargs?: Record<string, unknown>;
 }): Promise<string> {
   const maxContinuations = params.maxContinuations ?? 3;
   let result = '';
@@ -322,8 +337,8 @@ export async function callLlmMarkdown(params: {
       topK: params.topK,
       presencePenalty: params.presencePenalty,
       repeatPenalty: params.repeatPenalty,
+      chatTemplateKwargs: params.chatTemplateKwargs,
     });
-
     if (result === '') {
       result = response.content;
     } else {
