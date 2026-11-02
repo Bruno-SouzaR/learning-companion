@@ -176,8 +176,11 @@ export function sanitizePortugueseMarkdown(text: string): string {
     )
     // Normalize unindented display math blocks to prevent marked from turning them into pre/code
     .replace(/\n[ \t]+(\\\[[\s\S]+?\\\])/g, '\n\n$1\n\n')
-    .replace(/\n[ \t]+(\$\$[\s\S]+?\$\$)/g, '\n\n$1\n\n');
-
+    .replace(/\n[ \t]+(\$\$[\s\S]+?\$\$)/g, '\n\n$1\n\n')
+    // Normalize spacing after Pontos Nucleares header to strictly one blank line
+    .replace(/(#{1,4}\s*Pontos Nucleares[^\n]*)\n{2,}/gi, '$1\n\n')
+    // Ensure clean single linebreaks between bullet points in Pontos Nucleares
+    .replace(/(\n-\s+[^\n]+)\n{2,}(?=-\s+)/g, '$1\n');
   return repairMalformedMarkdownTables(cleaned);
 }
 /**
