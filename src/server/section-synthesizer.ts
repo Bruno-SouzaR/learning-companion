@@ -26,10 +26,107 @@ export interface SynthesizeSectionParams {
  * Defensive utility to sanitize study Markdown content,
  * replacing residual Spanish terms with correct Brazilian Portuguese (PT-BR) terms.
  */
+/**
+ * Automatically repairs broken or malformed Markdown tables:
+ * 1. Restores missing table headers when an orphaned separator row appears (e.g. ------|----------|---|).
+ * 2. Converts tab or multi-space separated pseudo-tables (e.g. Mechanism  Pros  Cons) into valid GFM pipe tables.
+ * 3. Guarantees valid syntax so CommonMark / Marked always renders clean HTML tables.
+ */
+export function repairMalformedMarkdownTables(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  const lines = text.split('\n');
+  const repaired: string[] = [];
+  let inTable = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Check if line is an orphaned table separator: e.g. ------|----------|---|
+    const isSep = /^\s*[-]{2,}\s*\|\s*[-| ]+$/.test(trimmed);
+    if (isSep) {
+      let hasValidHeader = false;
+      if (repaired.length > 0) {
+        const prev = repaired[repaired.length - 1].trim();
+        if (prev.startsWith('|') && prev.endsWith('|') && !/^\s*[-]{2,}\s*\|\s*[-| ]+$/.test(prev)) {
+          hasValidHeader = true;
+        }
+      }
+
+      if (!hasValidHeader) {
+        // Inspect row below to determine column count
+        let numCols = 3;
+        if (i + 1 < lines.length && lines[i + 1].trim().startsWith('|')) {
+          const belowParts = lines[i + 1]
+            .trim()
+            .split('|')
+            .slice(1, -1)
+            .map((p) => p.trim());
+          if (belowParts.length > 0) {
+            numCols = belowParts.length;
+          }
+        }
+
+        const defaultHeaders = ['Aspecto', 'Característica A', 'Característica B', 'Observações', 'Cenário Ideal'];
+        const headerCols = Array.from({ length: numCols }, (_, k) =>
+          k < defaultHeaders.length ? defaultHeaders[k] : `Coluna ${k + 1}`
+        );
+        repaired.push(`| ${headerCols.join(' | ')} |`);
+        repaired.push(`| ${Array.from({ length: numCols }, () => '---').join(' | ')} |`);
+        inTable = true;
+        continue;
+      }
+    }
+
+    // Check for multi-space or tab separated pseudo-tables (lines with 3+ columns without pipes)
+    if (
+      !trimmed.startsWith('|') &&
+      !trimmed.startsWith('#') &&
+      !trimmed.startsWith('```') &&
+      !trimmed.startsWith('-') &&
+      !trimmed.startsWith('*') &&
+      !trimmed.startsWith('>') &&
+      trimmed.length > 0
+    ) {
+      const parts = trimmed.split(/\t+|\s{3,}/).map((p) => p.trim()).filter(Boolean);
+      if (parts.length >= 3) {
+        // Look ahead to see if the table continues
+        let isTableContext = inTable;
+        if (i + 1 < lines.length) {
+          const nextTrimmed = lines[i + 1].trim();
+          const nextParts = nextTrimmed.split(/\t+|\s{3,}/).map((p) => p.trim()).filter(Boolean);
+          if (nextParts.length >= 2 || /^\s*[-]{2,}\s*\|\s*[-| ]+$/.test(nextTrimmed)) {
+            isTableContext = true;
+          }
+        }
+
+        if (isTableContext) {
+          const formattedRow = `| ${parts.join(' | ')} |`;
+          repaired.push(formattedRow);
+          if (!inTable) {
+            const sep = `| ${parts.map(() => '---').join(' | ')} |`;
+            repaired.push(sep);
+            inTable = true;
+          }
+          continue;
+        }
+      } else {
+        inTable = false;
+      }
+    } else if (trimmed.length === 0) {
+      inTable = false;
+    }
+
+    repaired.push(line);
+  }
+
+  return repaired.join('\n');
+}
+
 export function sanitizePortugueseMarkdown(text: string): string {
   if (!text || typeof text !== 'string') return '';
 
-  return text
+  const cleaned = text
     // Section headers and structural concepts
     .replace(/\bDefinici[oó]n\s+Te[oó]rica\b/gi, 'Definição Teórica')
     .replace(/\bMecanismo\s*(?:&|y|e)\s*Aplicaci[oó]n\s+Pr[aá]ctica\b/gi, 'Mecanismo & Aplicação Prática')
@@ -81,8 +178,9 @@ export function sanitizePortugueseMarkdown(text: string): string {
     // Normalize unindented display math blocks to prevent marked from turning them into pre/code
     .replace(/\n[ \t]+(\\\[[\s\S]+?\\\])/g, '\n\n$1\n\n')
     .replace(/\n[ \t]+(\$\$[\s\S]+?\$\$)/g, '\n\n$1\n\n');
-}
 
+  return repairMalformedMarkdownTables(cleaned);
+}
 /**
  * Safely closes unclosed code fences and trims empty trailing bullet markers
  * without deleting real text lines.
