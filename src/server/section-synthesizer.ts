@@ -348,15 +348,16 @@ Analyze the provided study material chunk and extract an exhaustive structural b
 CRITICAL MISSION:
 1. Identify the exact technical title naming the primary mechanism or technology. Do NOT include generic labels like "Módulo", "Capítulo" or "Seção".
 2. Extract EXACTLY 3 to 5 comprehensive "Pontos Nucleares" (foundational conceptual pillars).
-   - "Menos é mais": each bullet must summarize a broad, foundational concept of the section.
-   - STRICTLY FORBIDDEN: atomic minutiae, keyboard shortcuts (e.g. vim/nano keys), command flags (-v, -s, -d), or isolated parameter terms.
-3. Identify EVERY single core technical concept, algorithm, data structure, or mechanism present in the text.
+   - "Menos é mais": think carefully and group related technical details into broad, foundational conceptual pillars.
+   - Each bullet must be a substantive, high-level summary sentence explaining a macro pillar of the section.
+   - STRICTLY FORBIDDEN: atomic minutiae, keyboard shortcuts (e.g. vim/nano keys), command flags (-v, -s, -d), raw code snippets, or isolated parameter terms.
+3. Identify EVERY single core technical concept, algorithm, data structure, or mechanism present in the text that requires deep explanation in the body.
    Do NOT synthesize bibliographies, reading lists ("Referências Bibliográficas"), curricular enrichment boxes ("EXPLORE+"), or author signatures.
 4. Output strictly a JSON object conforming to the schema.`;
 
 /**
  * Pass 1: Extract exhaustive structural blueprint from the study chunk.
- * Runs without reasoning tokens (enable_thinking: false) for near-instant execution (<4s).
+ * Uses reasoning tokens (enable_thinking: true) to deeply plan and cluster the text into 3-5 macro conceptual pillars.
  */
 export async function extractSectionSkeleton(params: SynthesizeSectionParams): Promise<SkeletonBlueprint> {
   return callLlmJson({
@@ -368,9 +369,9 @@ export async function extractSectionSkeleton(params: SynthesizeSectionParams): P
       },
     ],
     schema: SKELETON_BLUEPRINT_SCHEMA,
-    temperature: 0.1,
-    maxTokens: 1500,
-    chatTemplateKwargs: { enable_thinking: false },
+    temperature: 0.15,
+    maxTokens: 3500,
+    chatTemplateKwargs: { enable_thinking: true },
     model: getStudiesModel(),
     baseUrl: getStudiesBaseUrl(),
   });
