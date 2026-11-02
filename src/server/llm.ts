@@ -223,12 +223,20 @@ export async function callLlmJson<T>(params: {
   model?: string;
   baseUrl?: string;
   chatTemplateKwargs?: Record<string, unknown>;
+  jsonMode?: boolean;
 }): Promise<T> {
+  const jsonMode =
+    params.jsonMode !== undefined
+      ? params.jsonMode
+      : params.chatTemplateKwargs?.enable_thinking === true
+        ? false
+        : true;
+
   const { content: rawContent } = await requestChatCompletion({
     messages: params.messages,
     temperature: params.temperature,
     maxTokens: params.maxTokens,
-    jsonMode: true,
+    jsonMode,
     model: params.model,
     baseUrl: params.baseUrl,
     chatTemplateKwargs: params.chatTemplateKwargs,

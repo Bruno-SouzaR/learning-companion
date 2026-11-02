@@ -303,7 +303,7 @@ STRUCTURE:
 ### Pontos Nucleares
 - [pilar 1: frase completa sintetizando um conceito estrutural da seção]
 - [pilar 2: frase completa sintetizando um conceito estrutural da seção]
-(Exatamente 3 a 5 marcadores conceituais abrangentes. Menos é mais: PROIBIDO listar teclas de atalho, flags de comandos ou listas de termos atômicos)
+(Entre 5 e 8 marcadores conceituais abrangentes. PROIBIDO listar teclas de atalho, flags de comandos ou listas de termos atômicos)
 
 Para cada conceito ou mecanismo técnico identificado no texto:
 ## [Nome do Conceito Técnico]
@@ -330,12 +330,12 @@ export const SKELETON_BLUEPRINT_SCHEMA = z.object({
   sectionTitle: z.string().describe('Título técnico específico da seção em português'),
   keyPoints: z
     .array(z.string())
-    .min(3)
-    .max(5)
-    .describe('Exatamente 3 a 5 frases completas abrangendo os pilares conceituais essenciais'),
+    .min(5)
+    .max(8)
+    .describe('Exatamente entre 5 e 8 frases completas abrangendo os pilares conceituais essenciais'),
   concepts: z
     .array(z.string())
-    .min(3)
+    .min(5)
     .max(12)
     .describe('Lista exaustiva de conceitos, mecanismos e estruturas técnicas abordados no texto'),
 });
@@ -347,8 +347,8 @@ Analyze the provided study material chunk and extract an exhaustive structural b
 
 CRITICAL MISSION:
 1. Identify the exact technical title naming the primary mechanism or technology. Do NOT include generic labels like "Módulo", "Capítulo" or "Seção".
-2. Extract EXACTLY 3 to 5 comprehensive "Pontos Nucleares" (foundational conceptual pillars).
-   - "Menos é mais": think carefully and group related technical details into broad, foundational conceptual pillars.
+2. Extract BETWEEN 5 AND 8 comprehensive "Pontos Nucleares" (foundational conceptual pillars).
+   - In a 70-page textbook section, condensing into only 3 points loses essential coverage. Extract at least 5 and at most 8 broad, macro conceptual pillars.
    - Each bullet must be a substantive, high-level summary sentence explaining a macro pillar of the section.
    - STRICTLY FORBIDDEN: atomic minutiae, keyboard shortcuts (e.g. vim/nano keys), command flags (-v, -s, -d), raw code snippets, or isolated parameter terms.
 3. Identify EVERY single core technical concept, algorithm, data structure, or mechanism present in the text that requires deep explanation in the body.
@@ -415,6 +415,7 @@ export async function synthesizeStudySection(params: SynthesizeSectionParams): P
     temperature: 0.15,
     topP: 0.9,
     repeatPenalty: 1.04,
+    chatTemplateKwargs: { enable_thinking: false },
   });
   const pruned = pruneDanglingMarkdownTail(rawMarkdown);
   const sanitized = sanitizePortugueseMarkdown(pruned);
@@ -461,13 +462,17 @@ export async function synthesizeStudySection(params: SynthesizeSectionParams): P
     resolvedTitle = sanitizePortugueseMarkdown(cleanTitle);
   }
   // If Markdown parser missed Pontos Nucleares, fall back to authoritative blueprint keyPoints
-  // Limit key points strictly to 3-5 comprehensive pillars (less is more)
+  // Final key points: ensure between 5 and 8 items, preferring the high-level blueprint pillars
   const finalKeyPoints =
-    cleanKeyPoints.length >= 3 && cleanKeyPoints.length <= 5
+    cleanKeyPoints.length >= 5 && cleanKeyPoints.length <= 8
       ? cleanKeyPoints
-      : blueprint?.keyPoints && blueprint.keyPoints.length >= 3
-        ? blueprint.keyPoints.slice(0, 5).map(sanitizePortugueseMarkdown)
-        : cleanKeyPoints.slice(0, 5);
+      : blueprint?.keyPoints && blueprint.keyPoints.length >= 5
+        ? blueprint.keyPoints.slice(0, 8).map(sanitizePortugueseMarkdown)
+        : cleanKeyPoints.length >= 3
+          ? cleanKeyPoints.slice(0, 8)
+          : blueprint?.keyPoints && blueprint.keyPoints.length > 0
+            ? blueprint.keyPoints.slice(0, 8).map(sanitizePortugueseMarkdown)
+            : cleanKeyPoints;
   return {
     sectionIndex: params.sectionIndex,
     sectionTitle: resolvedTitle,
