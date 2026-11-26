@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { extractTextFromPdf, chunkTextBySections } from '../src/server/pdf-extractor';
 import { INGEST_CHUNK_TOKENS } from '../src/server/ingest-job-manager';
 import { callLlmMarkdown } from '../src/server/llm';
@@ -17,7 +19,8 @@ DIRETRIZES DE SAÍDA:
 async function runBenchmark() {
   console.log('=== BENCHMARK: QWEN 3.5 4B (Porta 8080) vs BASELINE GEMMA 4 E4B ===\n');
 
-  const pdfPath = '/var/home/brunosouzar/Downloads/Sistema de arquivos.pdf';
+  const pdfPath = process.env.BENCH_PDF
+    ?? path.join(os.homedir(), 'Downloads', 'Sistema de arquivos.pdf');
   if (!fs.existsSync(pdfPath)) {
     console.error('PDF file not found:', pdfPath);
     process.exit(1);

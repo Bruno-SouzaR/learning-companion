@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { extractTextFromPdf, chunkTextBySections } from '../src/server/pdf-extractor';
 import { callLlmMarkdown } from '../src/server/llm';
 import { parseSectionMarkdown } from '../src/server/section-synthesizer';
@@ -22,7 +24,8 @@ DIRECTIVES:
 async function runBenchmark() {
   console.log('=== TESTE DE OTIMIZAÇÃO: Qwen 3.5 2B (Q8_0) com Fatias Menores e Extração Direta ===\n');
 
-  const pdfPath = '/var/home/brunosouzar/Downloads/Sistema de arquivos.pdf';
+  const pdfPath = process.env.BENCH_PDF
+    ?? path.join(os.homedir(), 'Downloads', 'Sistema de arquivos.pdf');
   if (!fs.existsSync(pdfPath)) {
     console.error('PDF file not found:', pdfPath);
     process.exit(1);

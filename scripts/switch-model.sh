@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-MODELS_DIR="/var/home/brunosouzar/.local/share/models"
-SERVICE_FILE="/var/home/brunosouzar/.config/systemd/user/learning-llm.service"
+MODELS_DIR="${MODELS_DIR:-$HOME/.local/share/models}"
+SERVICE_FILE="${SERVICE_FILE:-$HOME/.config/systemd/user/learning-llm.service}"
 ENV_FILE="$(dirname "$0")/../.env"
 
 declare -A MODEL_FILES=(
@@ -151,8 +151,8 @@ After=network.target
 
 [Service]
 Type=simple
-Environment="LD_LIBRARY_PATH=/var/home/brunosouzar/.local/lib/llama-vulkan"
-ExecStart=/var/home/brunosouzar/.local/bin/llama-server \\
+Environment="LD_LIBRARY_PATH=${LLAMA_LIB_DIR:-$HOME/.local/lib/llama-vulkan}"
+ExecStart=${LLAMA_SERVER:-$HOME/.local/bin/llama-server} \\
   -m $MODEL_PATH \\
   --alias $ALIAS \\
   -ngl 99 \\

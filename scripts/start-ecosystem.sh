@@ -7,8 +7,8 @@ cd "$PROJECT_ROOT"
 RUN_DIR="$PROJECT_ROOT/.run"
 mkdir -p "$RUN_DIR"
 
-MODELS_DIR="/var/home/brunosouzar/.local/share/models"
-LLAMA_SERVER="/var/home/brunosouzar/.local/bin/llama-server"
+MODELS_DIR="${MODELS_DIR:-$HOME/.local/share/models}"
+LLAMA_SERVER="${LLAMA_SERVER:-$HOME/.local/bin/llama-server}"
 
 ACTIVE_MODEL_KEY="gemma-4-e4b"
 if [[ -f "$PROJECT_ROOT/.env" ]]; then

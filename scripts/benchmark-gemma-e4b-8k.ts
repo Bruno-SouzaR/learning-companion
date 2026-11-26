@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { extractTextFromPdf, chunkTextBySections } from '../src/server/pdf-extractor';
 import { callLlmMarkdown } from '../src/server/llm';
 import {
@@ -11,7 +13,8 @@ import {
 async function runBenchmark() {
   console.log('=== BENCHMARK: GEMMA 4 E4B (8k Context + Flash Attention + 4000-token Chunk) ===\n');
 
-  const pdfPath = '/var/home/brunosouzar/Downloads/Sistema de arquivos.pdf';
+  const pdfPath = process.env.BENCH_PDF
+    ?? path.join(os.homedir(), 'Downloads', 'Sistema de arquivos.pdf');
   if (!fs.existsSync(pdfPath)) {
     console.error('PDF file not found:', pdfPath);
     process.exit(1);

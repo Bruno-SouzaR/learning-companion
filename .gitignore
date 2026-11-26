@@ -33,3 +33,6 @@ data/cache.db*
 .cache/
 data/logs/
 .run/
+
+# personal study data (local only)
+data/wiki/
